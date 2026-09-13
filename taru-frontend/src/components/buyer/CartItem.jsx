@@ -5,25 +5,31 @@ import { formatCurrency } from '../../utils/formatters.jsx'
 
 export default function CartItem({ item }) {
   const { updateQuantity, removeFromCart } = useCart()
-  const { product, quantity } = item
-  const primaryImage = product.images?.[0]?.url || '/placeholder-product.jpg'
+  const product = item.product || {}
+  const productId = product._id || item.productId || item._id
+  const quantity = item.quantity || 1
+  const primaryImage = product.images?.[0]?.url || item.imageUrl || '/placeholder-product.jpg'
+  const unitPrice =
+    typeof product.price === 'number'
+      ? product.price
+      : (product.price?.discountedAmount ?? product.price?.amount ?? item.price ?? 0)
 
-  const handleIncrease = () => updateQuantity(product._id, quantity + 1)
+  const handleIncrease = () => updateQuantity(productId, quantity + 1)
   const handleDecrease = () => {
     if (quantity <= 1) {
-      removeFromCart(product._id)
+      removeFromCart(productId)
     } else {
-      updateQuantity(product._id, quantity - 1)
+      updateQuantity(productId, quantity - 1)
     }
   }
 
   return (
     <div className="flex gap-4 py-4 border-b border-gray-100 last:border-0">
       {/* Image */}
-      <Link to={`/products/${product._id}`} className="shrink-0">
+      <Link to={`/products/${productId}`} className="shrink-0">
         <img
           src={primaryImage}
-          alt={product.title}
+          alt={product.title || item.title || 'Product'}
           className="w-20 h-20 object-cover rounded-lg bg-gray-100"
         />
       </Link>
@@ -31,13 +37,13 @@ export default function CartItem({ item }) {
       {/* Details */}
       <div className="flex-1 min-w-0">
         <Link
-          to={`/products/${product._id}`}
+          to={`/products/${productId}`}
           className="text-sm font-semibold text-gray-800 hover:text-primary-600 line-clamp-2"
         >
-          {product.title}
+          {product.title || item.title || 'Product'}
         </Link>
         <p className="text-xs text-gray-400 mt-0.5">
-          {product.seller?.name || 'SHG Seller'}
+          {product.seller?.name || product.sellerName || 'SHG Seller'}
         </p>
 
         <div className="flex items-center justify-between mt-3">
@@ -62,10 +68,10 @@ export default function CartItem({ item }) {
 
           <div className="flex items-center gap-3">
             <span className="text-sm font-bold text-gray-900">
-              {formatCurrency(product.price * quantity)}
+              {formatCurrency(unitPrice * quantity)}
             </span>
             <button
-              onClick={() => removeFromCart(product._id)}
+              onClick={() => removeFromCart(productId)}
               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
               aria-label="Remove item"
             >

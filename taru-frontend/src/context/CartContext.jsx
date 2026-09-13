@@ -19,11 +19,15 @@ function cartReducer(state, action) {
 
     case 'SET_CART': {
       const items = action.payload || []
-      const totalItems = items.reduce((sum, item) => sum + item.quantity, 0)
-      const totalPrice = items.reduce(
-        (sum, item) => sum + item.quantity * item.product.price,
-        0
-      )
+      const totalItems = items.reduce((sum, item) => sum + (item.quantity || 1), 0)
+      const totalPrice = items.reduce((sum, item) => {
+        const p = item.product || {}
+        const price =
+          typeof p.price === 'number'
+            ? p.price
+            : (p.price?.discountedAmount ?? p.price?.amount ?? item.price ?? 0)
+        return sum + (item.quantity || 1) * price
+      }, 0)
       return { ...state, items, totalItems, totalPrice, isLoading: false }
     }
 

@@ -5,18 +5,49 @@ const Event = require('../models/Event');
 const { AppError } = require('../middleware/errorHandler');
 const { success } = require('../utils/response');
 
+const formatCartResponse = (cart) => {
+  const cartObj = cart.toObject ? cart.toObject() : { ...cart };
+  if (cartObj.items) {
+    cartObj.items = cartObj.items.map((item) => {
+      const populatedProduct = item.productId && typeof item.productId === 'object' ? item.productId : null;
+      const productIdStr = populatedProduct?._id?.toString() || item.productId?.toString();
+      const priceNum = typeof item.price === 'number' ? item.price : (populatedProduct?.price?.discountedAmount || populatedProduct?.price?.amount || 0);
+
+      const product = {
+        _id: productIdStr,
+        title: populatedProduct?.title || item.title,
+        price: priceNum,
+        images: populatedProduct?.images?.length
+          ? populatedProduct.images
+          : (item.imageUrl ? [{ url: item.imageUrl, isPrimary: true }] : []),
+        seller: populatedProduct?.sellerId || item.sellerId,
+        sellerId: populatedProduct?.sellerId || item.sellerId,
+        status: populatedProduct?.status || 'PUBLISHED',
+      };
+
+      return {
+        ...item,
+        productId: productIdStr,
+        product,
+        price: priceNum,
+      };
+    });
+  }
+  return cartObj;
+};
+
 /**
  * GET /cart - Get current user's cart
  */
 const getCart = async (req, res, next) => {
   try {
     let cart = await Cart.findOne({ buyerId: req.userId })
-      .populate('items.productId', 'title images price status type');
+      .populate('items.productId', 'title images price status type sellerId');
 
     if (!cart) {
       cart = await Cart.create({ buyerId: req.userId, items: [] });
     }
-    return success(res, cart);
+    return success(res, formatCartResponse(cart));
   } catch (err) { next(err); }
 };
 
@@ -51,6 +82,10 @@ const addItem = async (req, res, next) => {
         (product.type !== 'UNIQUE' || item.inventoryItemId?.toString() === inventoryItemId)
     );
 
+    const priceValue = typeof product.price === 'number'
+      ? product.price
+      : (product.price?.discountedAmount || product.price?.amount || 0);
+
     if (existingItemIdx >= 0) {
       if (product.type === 'UNIQUE') {
         throw new AppError('Unique item already in cart', 409, 'ALREADY_IN_CART');
@@ -61,9 +96,9 @@ const addItem = async (req, res, next) => {
         productId,
         inventoryItemId: product.type === 'UNIQUE' ? inventoryItemId : undefined,
         quantity,
-        price: product.price.discountedAmount || product.price.amount,
+        price: priceValue,
         title: product.title,
-        imageUrl: product.images.find((i) => i.isPrimary)?.url || product.images[0]?.url,
+        imageUrl: product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url,
         sellerId: product.sellerId,
       });
     }
@@ -74,7 +109,8 @@ const addItem = async (req, res, next) => {
     // Track cart_add event
     Event.create({ userId: req.userId, type: 'cart_add', entityId: product._id, entityType: 'product' }).catch(() => {});
 
-    return success(res, cart);
+    await cart.populate('items.productId', 'title images price status type sellerId');
+    return success(res, formatCartResponse(cart));
   } catch (err) { next(err); }
 };
 
@@ -89,13 +125,17 @@ const updateItem = async (req, res, next) => {
     const cart = await Cart.findOne({ buyerId: req.userId });
     if (!cart) throw new AppError('Cart not found', 404, 'CART_NOT_FOUND');
 
-    const item = cart.items.id(req.params.itemId);
+    const targetId = req.params.itemId;
+    const item = cart.items.id(targetId) || cart.items.find(
+      (i) => i.productId.toString() === targetId || i._id.toString() === targetId
+    );
     if (!item) throw new AppError('Item not in cart', 404, 'ITEM_NOT_FOUND');
 
     item.quantity = quantity;
     cart.version += 1;
     await cart.save();
-    return success(res, cart);
+    await cart.populate('items.productId', 'title images price status type sellerId');
+    return success(res, formatCartResponse(cart));
   } catch (err) { next(err); }
 };
 
@@ -107,15 +147,19 @@ const removeItem = async (req, res, next) => {
     const cart = await Cart.findOne({ buyerId: req.userId });
     if (!cart) throw new AppError('Cart not found', 404, 'CART_NOT_FOUND');
 
-    const item = cart.items.id(req.params.itemId);
+    const targetId = req.params.itemId;
+    const item = cart.items.id(targetId) || cart.items.find(
+      (i) => i.productId.toString() === targetId || i._id.toString() === targetId
+    );
     if (!item) throw new AppError('Item not in cart', 404, 'ITEM_NOT_FOUND');
 
-    item.remove ? item.remove() : cart.items.pull(req.params.itemId);
+    cart.items.pull(item._id);
     cart.version += 1;
     await cart.save();
 
     Event.create({ userId: req.userId, type: 'cart_remove', entityId: item.productId, entityType: 'product' }).catch(() => {});
-    return success(res, cart);
+    await cart.populate('items.productId', 'title images price status type sellerId');
+    return success(res, formatCartResponse(cart));
   } catch (err) { next(err); }
 };
 
