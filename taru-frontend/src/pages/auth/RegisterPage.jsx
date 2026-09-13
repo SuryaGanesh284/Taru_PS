@@ -46,12 +46,19 @@ export default function RegisterPage() {
     setIsLoading(true)
     try {
       const { confirmPassword, ...payload } = form
+      if (!payload.phone?.trim()) delete payload.phone
+      if (payload.role) payload.role = payload.role.toUpperCase()
+
       const user = await register(payload)
-      if (user.role === 'seller') navigate('/seller/dashboard', { replace: true })
+      const userRole = (user?.role || '').toLowerCase()
+      if (userRole === 'seller') navigate('/seller/dashboard', { replace: true })
       else navigate('/', { replace: true })
     } catch (err) {
       setErrors({
-        submit: err.response?.data?.error?.message || 'Registration failed. Please try again.',
+        submit:
+          err.response?.data?.error?.message ||
+          err.response?.data?.message ||
+          'Registration failed. Please try again.',
       })
     } finally {
       setIsLoading(false)

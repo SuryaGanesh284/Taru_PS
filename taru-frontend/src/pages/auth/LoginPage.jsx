@@ -29,13 +29,16 @@ export default function LoginPage() {
     setIsLoading(true)
     try {
       const user = await login(form.email, form.password)
+      const userRole = (user?.role || '').toLowerCase()
       // Redirect based on role
-      if (user.role === 'seller') navigate('/seller/dashboard', { replace: true })
-      else if (user.role === 'admin') navigate('/admin/dashboard', { replace: true })
+      if (userRole === 'seller') navigate('/seller/dashboard', { replace: true })
+      else if (userRole === 'admin') navigate('/admin/dashboard', { replace: true })
       else navigate(from, { replace: true })
     } catch (err) {
       setError(
-        err.response?.data?.error?.message || 'Invalid credentials. Please try again.'
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        'Invalid credentials. Please try again.'
       )
     } finally {
       setIsLoading(false)

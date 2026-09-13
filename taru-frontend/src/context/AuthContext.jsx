@@ -1,12 +1,21 @@
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
 import { authAPI } from '../api/authAPI.jsx'
+import { injectAuthHelpers } from '../api/axiosInstance.jsx'
 import toast from 'react-hot-toast'
 
 const AuthContext = createContext(null)
 
+const normalizeUser = (user) => {
+  if (!user) return null
+  return {
+    ...user,
+    role: (user.role || 'buyer').toLowerCase(),
+  }
+}
+
 const initialState = {
   user: null,
-  accessToken: null,
+  accessToken: typeof window !== 'undefined' ? localStorage.getItem('taru_access_token') : null,
   isLoading: true,
   isAuthenticated: false,
 }
@@ -16,28 +25,39 @@ function authReducer(state, action) {
     case 'AUTH_INIT_DONE':
       return { ...state, isLoading: false }
 
-    case 'LOGIN_SUCCESS':
+    case 'LOGIN_SUCCESS': {
+      const user = normalizeUser(action.payload.user)
+      const accessToken = action.payload.accessToken
+      if (accessToken) {
+        localStorage.setItem('taru_access_token', accessToken)
+      }
       return {
         ...state,
-        user: action.payload.user,
-        accessToken: action.payload.accessToken,
+        user,
+        accessToken,
         isAuthenticated: true,
         isLoading: false,
       }
+    }
 
     case 'LOGOUT':
+      localStorage.removeItem('taru_access_token')
       return {
         ...initialState,
+        accessToken: null,
         isLoading: false,
       }
 
     case 'UPDATE_USER':
       return {
         ...state,
-        user: { ...state.user, ...action.payload },
+        user: normalizeUser({ ...state.user, ...action.payload }),
       }
 
     case 'SET_TOKEN':
+      if (action.payload) {
+        localStorage.setItem('taru_access_token', action.payload)
+      }
       return {
         ...state,
         accessToken: action.payload,
@@ -51,50 +71,74 @@ function authReducer(state, action) {
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState)
 
-  // On mount: try to restore session via refresh token (stored in httpOnly cookie)
+  // Inject helpers into axiosInstance so interceptors can attach / refresh token
+  useEffect(() => {
+    injectAuthHelpers(
+      (token) => dispatch({ type: 'SET_TOKEN', payload: token }),
+      () => state.accessToken || localStorage.getItem('taru_access_token')
+    )
+  }, [state.accessToken])
+
+  // On mount: try to restore session via refresh token or getMe if token exists
   useEffect(() => {
     const restoreSession = async () => {
       try {
         const res = await authAPI.refresh()
-        dispatch({
-          type: 'LOGIN_SUCCESS',
-          payload: {
-            user: res.data.user,
-            accessToken: res.data.accessToken,
-          },
-        })
+        const user = res.data?.user || res.data?.data?.user
+        const accessToken = res.data?.accessToken || res.data?.data?.accessToken
+        if (user && accessToken) {
+          dispatch({
+            type: 'LOGIN_SUCCESS',
+            payload: { user, accessToken },
+          })
+          return
+        }
       } catch {
-        // No valid session — that's fine
-        dispatch({ type: 'AUTH_INIT_DONE' })
+        // Refresh cookie not valid; check if token exists in localStorage
+        const storedToken = localStorage.getItem('taru_access_token')
+        if (storedToken) {
+          try {
+            const meRes = await authAPI.getMe()
+            const user = meRes.data?.user || meRes.data?.data?.user
+            if (user) {
+              dispatch({
+                type: 'LOGIN_SUCCESS',
+                payload: { user, accessToken: storedToken },
+              })
+              return
+            }
+          } catch {
+            localStorage.removeItem('taru_access_token')
+          }
+        }
       }
+      dispatch({ type: 'AUTH_INIT_DONE' })
     }
     restoreSession()
   }, [])
 
   const login = useCallback(async (email, password) => {
     const res = await authAPI.login({ email, password })
+    const user = res.data?.user || res.data?.data?.user
+    const accessToken = res.data?.accessToken || res.data?.data?.accessToken
     dispatch({
       type: 'LOGIN_SUCCESS',
-      payload: {
-        user: res.data.user,
-        accessToken: res.data.accessToken,
-      },
+      payload: { user, accessToken },
     })
-    toast.success(`Welcome back, ${res.data.user.name}!`)
-    return res.data.user
+    toast.success(`Welcome back, ${user?.name || 'User'}!`)
+    return normalizeUser(user)
   }, [])
 
   const register = useCallback(async (formData) => {
     const res = await authAPI.register(formData)
+    const user = res.data?.user || res.data?.data?.user
+    const accessToken = res.data?.accessToken || res.data?.data?.accessToken
     dispatch({
       type: 'LOGIN_SUCCESS',
-      payload: {
-        user: res.data.user,
-        accessToken: res.data.accessToken,
-      },
+      payload: { user, accessToken },
     })
     toast.success('Account created successfully!')
-    return res.data.user
+    return normalizeUser(user)
   }, [])
 
   const logout = useCallback(async () => {
