@@ -15,7 +15,20 @@ const defaultForm = {
 }
 
 export default function ProductForm({ initialData = null, onSubmit, isLoading }) {
-  const [form, setForm] = useState(initialData ? { ...initialData } : defaultForm)
+  const getInitialForm = () => {
+    if (!initialData) return defaultForm
+    const rawPrice = initialData.price
+    const price = typeof rawPrice === 'object' && rawPrice !== null ? (rawPrice.amount ?? '') : (rawPrice ?? '')
+    const categoryId = initialData.categoryId?._id || initialData.categoryId || initialData.category?._id || initialData.category || ''
+    return {
+      ...defaultForm,
+      ...initialData,
+      price,
+      categoryId,
+    }
+  }
+
+  const [form, setForm] = useState(getInitialForm)
   const [categories, setCategories] = useState([])
   const [mediaFiles, setMediaFiles] = useState([])
   const [previews, setPreviews] = useState(initialData?.images || [])
