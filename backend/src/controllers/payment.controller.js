@@ -32,6 +32,8 @@ const createIntent = async (req, res, next) => {
     // For now, return mock data structure
     const intentData = {
       paymentId: payment._id,
+      paymentIntentId: payment._id,
+      paymentUrl: null,
       provider: payment.provider,
       amount: payment.amount,
       currency: payment.currency,
