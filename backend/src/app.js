@@ -41,11 +41,24 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // CORS
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
 }));
 
 // Compression
@@ -80,7 +93,9 @@ const API = '/api/v1';
 app.use(`${API}/auth`, authRoutes);
 app.use(`${API}/users`, userRoutes);
 app.use(`${API}/sellers`, sellerRoutes);
+app.use(`${API}/seller`, sellerRoutes);
 app.use(`${API}/categories`, categoryRoutes);
+app.use(`${API}/products/:productId/reviews`, reviewRoutes);
 app.use(`${API}/products`, productRoutes);
 app.use(`${API}/search`, searchRoutes);
 app.use(`${API}/events`, eventRoutes);

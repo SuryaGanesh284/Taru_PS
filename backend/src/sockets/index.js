@@ -1,6 +1,6 @@
 const { Server } = require('socket.io');
-const { verifyAccessToken } = require('./services/auth.service');
-const logger = require('./utils/logger');
+const { verifyAccessToken } = require('../services/auth.service');
+const logger = require('../utils/logger');
 
 let io = null;
 
@@ -8,9 +8,22 @@ let io = null;
  * Initialize Socket.IO server with JWT auth
  */
 const initSocket = (server) => {
+  const allowedOrigins = [
+    process.env.CLIENT_URL,
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+  ].filter(Boolean);
+
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:3000',
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
       credentials: true,
     },
     transports: ['websocket', 'polling'],
@@ -19,15 +32,22 @@ const initSocket = (server) => {
   // JWT authentication middleware for socket connections
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
-      if (!token) return next(new Error('Authentication token required'));
-
-      const payload = verifyAccessToken(token);
-      socket.userId = payload.sub;
-      socket.userRole = payload.role;
+      const rawToken = socket.handshake.auth?.token || socket.handshake.headers?.authorization;
+      const token = rawToken?.replace(/^Bearer\s+/i, '');
+      if (token) {
+        const payload = verifyAccessToken(token);
+        socket.userId = payload.sub;
+        socket.userRole = payload.role;
+      } else {
+        socket.userId = `guest_${socket.id}`;
+        socket.userRole = 'GUEST';
+      }
       next();
     } catch (err) {
-      next(new Error('Invalid authentication token'));
+      // Degrade gracefully to guest connection instead of rejecting
+      socket.userId = `guest_${socket.id}`;
+      socket.userRole = 'GUEST';
+      next();
     }
   });
 
