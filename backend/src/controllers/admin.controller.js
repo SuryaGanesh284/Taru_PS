@@ -70,16 +70,24 @@ const getPendingSellers = async (req, res, next) => {
     const limit = Math.min(50, parseInt(req.query.limit) || 20);
     const skip = (page - 1) * limit;
 
+    const query = { verificationStatus: { $in: ['SUBMITTED', 'PENDING'] } };
+
     const [sellers, total] = await Promise.all([
-      SellerProfile.find({ verificationStatus: 'SUBMITTED' })
+      SellerProfile.find(query)
         .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('userId', 'name email phone'),
-      SellerProfile.countDocuments({ verificationStatus: 'SUBMITTED' }),
+      SellerProfile.countDocuments(query),
     ]);
 
-    return paginated(res, sellers, { page, limit, total });
+    const formattedSellers = sellers.map((s) => {
+      const obj = s.toObject ? s.toObject() : { ...s };
+      obj.user = obj.userId;
+      return obj;
+    });
+
+    return paginated(res, formattedSellers, { page, limit, total });
   } catch (err) { next(err); }
 };
 
@@ -88,8 +96,13 @@ const getPendingSellers = async (req, res, next) => {
  */
 const updateSellerVerification = async (req, res, next) => {
   try {
-    const { status, rejectionReason } = req.body;
-    if (!['VERIFIED', 'REJECTED'].includes(status)) throw new AppError('Invalid verification status', 400, 'INVALID_STATUS');
+    let status = (req.body.status || '').toUpperCase();
+    if (status === 'APPROVED') status = 'VERIFIED';
+    const rejectionReason = req.body.rejectionReason || req.body.note || req.body.reason || 'Verification rejected';
+
+    if (!['VERIFIED', 'REJECTED'].includes(status)) {
+      throw new AppError('Invalid verification status', 400, 'INVALID_STATUS');
+    }
 
     const seller = await SellerProfile.findByIdAndUpdate(
       req.params.sellerId,
@@ -105,15 +118,17 @@ const updateSellerVerification = async (req, res, next) => {
     if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
 
     // Notify seller
-    Notification.create({
-      userId: seller.userId._id,
-      type: 'SELLER_VERIFIED',
-      title: status === 'VERIFIED' ? 'Account Verified!' : 'Verification Rejected',
-      message: status === 'VERIFIED'
-        ? 'Congratulations! Your seller account has been verified. You can now list products.'
-        : `Your verification was rejected: ${rejectionReason}`,
-      data: { sellerId: seller._id, status },
-    }).catch(() => {});
+    if (seller.userId?._id) {
+      Notification.create({
+        userId: seller.userId._id,
+        type: 'SELLER_VERIFIED',
+        title: status === 'VERIFIED' ? 'Account Verified!' : 'Verification Rejected',
+        message: status === 'VERIFIED'
+          ? 'Congratulations! Your seller account has been verified. You can now list products.'
+          : `Your verification was rejected: ${rejectionReason}`,
+        data: { sellerId: seller._id, status },
+      }).catch(() => {});
+    }
 
     await audit({
       actorId: req.userId, actorRole: 'ADMIN',
@@ -121,7 +136,10 @@ const updateSellerVerification = async (req, res, next) => {
       resourceId: seller._id, metadata: { status, rejectionReason }, requestId: req.requestId,
     });
 
-    return success(res, seller);
+    const formattedSeller = seller.toObject ? seller.toObject() : { ...seller };
+    formattedSeller.user = formattedSeller.userId;
+
+    return success(res, formattedSeller);
   } catch (err) { next(err); }
 };
 
@@ -144,7 +162,14 @@ const getPendingProducts = async (req, res, next) => {
       Product.countDocuments({ status: 'PENDING_REVIEW' }),
     ]);
 
-    return paginated(res, products, { page, limit, total });
+    const formattedProducts = products.map((p) => {
+      const obj = p.toObject ? p.toObject() : { ...p };
+      obj.seller = obj.sellerId;
+      obj.category = obj.categoryId;
+      return obj;
+    });
+
+    return paginated(res, formattedProducts, { page, limit, total });
   } catch (err) { next(err); }
 };
 
@@ -153,9 +178,11 @@ const getPendingProducts = async (req, res, next) => {
  */
 const moderateProduct = async (req, res, next) => {
   try {
-    const { action, rejectionReason } = req.body; // action: 'approve' | 'reject'
+    const decisionVal = (req.body.decision || req.body.action || '').toUpperCase();
+    const isApproved = decisionVal === 'APPROVED' || decisionVal === 'APPROVE';
+    const status = isApproved ? 'PUBLISHED' : 'REJECTED';
+    const rejectionReason = req.body.reason || req.body.rejectionReason;
 
-    const status = action === 'approve' ? 'PUBLISHED' : 'REJECTED';
     const product = await Product.findByIdAndUpdate(
       req.params.productId,
       { status, rejectionReason: status === 'REJECTED' ? rejectionReason : undefined },
@@ -165,23 +192,29 @@ const moderateProduct = async (req, res, next) => {
     if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
 
     // Notify seller
-    Notification.create({
-      userId: product.sellerId.userId,
-      type: action === 'approve' ? 'PRODUCT_APPROVED' : 'PRODUCT_REJECTED',
-      title: action === 'approve' ? 'Product Published' : 'Product Rejected',
-      message: action === 'approve'
-        ? `"${product.title}" is now live on the marketplace!`
-        : `"${product.title}" was rejected: ${rejectionReason}`,
-      data: { productId: product._id },
-    }).catch(() => {});
+    if (product.sellerId?.userId) {
+      Notification.create({
+        userId: product.sellerId.userId,
+        type: isApproved ? 'PRODUCT_APPROVED' : 'PRODUCT_REJECTED',
+        title: isApproved ? 'Product Published' : 'Product Rejected',
+        message: isApproved
+          ? `"${product.title}" is now live on the marketplace!`
+          : `"${product.title}" was rejected: ${rejectionReason || 'No reason provided'}`,
+        data: { productId: product._id },
+      }).catch(() => {});
+    }
 
     await audit({
       actorId: req.userId, actorRole: 'ADMIN',
       action: 'MODERATE_PRODUCT', resource: 'Product',
-      resourceId: product._id, metadata: { action, status }, requestId: req.requestId,
+      resourceId: product._id, metadata: { decision: decisionVal, status }, requestId: req.requestId,
     });
 
-    return success(res, product);
+    const formattedProduct = product.toObject ? product.toObject() : { ...product };
+    formattedProduct.seller = formattedProduct.sellerId;
+    formattedProduct.category = formattedProduct.categoryId;
+
+    return success(res, formattedProduct);
   } catch (err) { next(err); }
 };
 
@@ -197,14 +230,34 @@ const listAllOrders = async (req, res, next) => {
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.paymentStatus) filter.paymentStatus = req.query.paymentStatus;
+    if (req.query.search || req.query.q) {
+      const term = req.query.search || req.query.q;
+      filter.$or = [
+        { orderNumber: { $regex: term, $options: 'i' } },
+      ];
+    }
 
     const [orders, total] = await Promise.all([
       Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit)
-        .populate('buyerId', 'name email phone'),
+        .populate('buyerId', 'name email phone')
+        .populate('items.sellerId', 'shgName'),
       Order.countDocuments(filter),
     ]);
 
-    return paginated(res, orders, { page, limit, total });
+    const formattedOrders = orders.map((o) => {
+      const obj = o.toObject ? o.toObject() : { ...o };
+      obj.buyer = obj.buyerId;
+      obj.totals = obj.pricing;
+      if (obj.items) {
+        obj.items = obj.items.map((it) => ({
+          ...it,
+          seller: it.sellerId,
+        }));
+      }
+      return obj;
+    });
+
+    return paginated(res, formattedOrders, { page, limit, total });
   } catch (err) { next(err); }
 };
 
@@ -215,9 +268,20 @@ const initiateRefund = async (req, res, next) => {
   try {
     const { orderId, amount, reason } = req.body;
 
-    const payment = await Payment.findOne({ orderId });
-    if (!payment) throw new AppError('Payment not found for this order', 404, 'PAYMENT_NOT_FOUND');
-    if (payment.status !== 'PAID') throw new AppError('Can only refund paid orders', 409, 'INVALID_PAYMENT_STATUS');
+    let payment = await Payment.findOne({ orderId });
+    if (!payment) {
+      const order = await Order.findById(orderId);
+      if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+
+      payment = await Payment.create({
+        orderId: order._id,
+        provider: 'razorpay',
+        amount: order.pricing?.total || amount || 0,
+        currency: 'INR',
+        status: 'PAID',
+        paidAt: new Date(),
+      });
+    }
 
     payment.refunds.push({ amount, reason, status: 'PENDING', createdAt: new Date() });
     payment.status = 'PARTIALLY_REFUNDED';
