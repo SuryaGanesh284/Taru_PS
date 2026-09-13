@@ -52,7 +52,7 @@ export default function CartPage() {
             {/* Items */}
             <div className="lg:col-span-2 card">
               {items.map((item) => (
-                <CartItem key={item.product._id} item={item} />
+                <CartItem key={item.product?._id || item.productId || item._id} item={item} />
               ))}
             </div>
 

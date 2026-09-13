@@ -2,9 +2,12 @@ const SellerProfile = require('../models/SellerProfile');
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
+const Shipment = require('../models/Shipment');
+const Notification = require('../models/Notification');
 const { AppError } = require('../middleware/errorHandler');
 const { success, created, paginated } = require('../utils/response');
 const { audit } = require('../utils/audit');
+const { emitOrderEvent, emitToUser } = require('../sockets');
 
 /**
  * POST /sellers/profile - Create SHG seller profile
@@ -192,7 +195,104 @@ const getAnalytics = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+/**
+ * GET /sellers/me/orders/:orderId - Get single order for seller
+ */
+const getMyOrder = async (req, res, next) => {
+  try {
+    const profile = await SellerProfile.findOne({ userId: req.userId });
+    if (!profile) throw new AppError('Seller profile not found', 404, 'PROFILE_NOT_FOUND');
+
+    const order = await Order.findOne({ _id: req.params.orderId, 'items.sellerId': profile._id })
+      .populate('buyerId', 'name email phone')
+      .populate('items.productId', 'title images price status type')
+      .populate('shipmentId');
+
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+
+    return success(res, order);
+  } catch (err) { next(err); }
+};
+
+/**
+ * PATCH /sellers/me/orders/:orderId/status - Update order status
+ */
+const updateOrderStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    if (!status) throw new AppError('Status is required', 400, 'MISSING_STATUS');
+
+    const profile = await SellerProfile.findOne({ userId: req.userId });
+    if (!profile) throw new AppError('Seller profile not found', 404, 'PROFILE_NOT_FOUND');
+
+    const order = await Order.findOne({ _id: req.params.orderId, 'items.sellerId': profile._id });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+
+    order.status = status;
+    if (status === 'DELIVERED') order.deliveredAt = new Date();
+    await order.save();
+
+    emitOrderEvent(order._id, 'order:status', { orderId: order._id, status });
+    emitToUser(order.buyerId, 'order:updated', { orderId: order._id, status });
+
+    Notification.create({
+      userId: order.buyerId,
+      type: `ORDER_${status}`,
+      title: `Order #${order._id.toString().slice(-6).toUpperCase()} ${status}`,
+      message: `Your order status has been updated to ${status}.`,
+      data: { orderId: order._id, status },
+    }).catch(() => {});
+
+    return success(res, order);
+  } catch (err) { next(err); }
+};
+
+/**
+ * POST /sellers/me/orders/:orderId/ship - Ship order
+ */
+const shipOrder = async (req, res, next) => {
+  try {
+    const { trackingNumber, carrier = 'Standard Shipping', trackingUrl } = req.body;
+    if (!trackingNumber) throw new AppError('Tracking number is required', 400, 'MISSING_TRACKING_NUMBER');
+
+    const profile = await SellerProfile.findOne({ userId: req.userId });
+    if (!profile) throw new AppError('Seller profile not found', 404, 'PROFILE_NOT_FOUND');
+
+    const order = await Order.findOne({ _id: req.params.orderId, 'items.sellerId': profile._id });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+
+    const shipment = await Shipment.create({
+      orderId: order._id,
+      carrier,
+      trackingNumber,
+      trackingUrl,
+      status: 'AWAITING_PICKUP',
+      events: [
+        { status: 'AWAITING_PICKUP', description: `Shipment created with tracking number ${trackingNumber}`, timestamp: new Date() },
+      ],
+    });
+
+    order.shipmentId = shipment._id;
+    order.status = 'SHIPPED';
+    await order.save();
+
+    emitOrderEvent(order._id, 'order:status', { orderId: order._id, status: 'SHIPPED', shipment });
+    emitToUser(order.buyerId, 'order:updated', { orderId: order._id, status: 'SHIPPED', trackingNumber });
+
+    Notification.create({
+      userId: order.buyerId,
+      type: 'ORDER_SHIPPED',
+      title: 'Order Shipped!',
+      message: `Your order has been shipped via ${carrier}. Tracking: ${trackingNumber}`,
+      data: { orderId: order._id, shipmentId: shipment._id, trackingNumber },
+    }).catch(() => {});
+
+    return success(res, { order, shipment });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   createProfile, getMyProfile, updateProfile, submitVerification,
   getPublicProfile, getDashboard, getMyProducts, getMyOrders, getAnalytics,
+  getMyOrder, updateOrderStatus, shipOrder,
 };

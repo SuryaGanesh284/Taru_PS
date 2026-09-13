@@ -14,10 +14,12 @@ const registerSchema = Joi.object({
     .when('phone', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }),
   phone: Joi.string()
     .pattern(/^[6-9]\d{9}$/)
+    .allow('', null)
     .optional()
+    .empty('')
     .messages({ 'string.pattern.base': 'Phone must be a valid 10-digit Indian mobile number' }),
   password: Joi.string().min(8).required(),
-  role: Joi.string().valid('BUYER', 'SELLER').default('BUYER'),
+  role: Joi.string().uppercase().valid('BUYER', 'SELLER').default('BUYER'),
 });
 
 const loginSchema = Joi.object({

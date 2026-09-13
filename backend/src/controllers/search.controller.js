@@ -59,4 +59,38 @@ const search = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { search };
+/**
+ * GET /search/suggestions - Autocomplete suggestions
+ */
+const searchSuggestions = async (req, res, next) => {
+  try {
+    const q = req.query.q?.trim();
+    if (!q) return success(res, []);
+
+    const products = await Product.find({
+      status: 'PUBLISHED',
+      title: { $regex: q, $options: 'i' },
+    })
+      .limit(8)
+      .select('title');
+
+    const suggestions = products.map((p) => p.title);
+    return success(res, suggestions);
+  } catch (err) { next(err); }
+};
+
+/**
+ * GET /search/trending - Trending items / searches
+ */
+const getTrending = async (req, res, next) => {
+  try {
+    const products = await Product.find({ status: 'PUBLISHED' })
+      .sort({ totalSold: -1, viewCount: -1 })
+      .limit(6)
+      .select('title price images rating');
+
+    return success(res, products);
+  } catch (err) { next(err); }
+};
+
+module.exports = { search, searchSuggestions, getTrending };

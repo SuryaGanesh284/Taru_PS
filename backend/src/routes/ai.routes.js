@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, optionalAuth } = require('../middleware/auth');
 const aiCtrl = require('../controllers/ai.controller');
 const rateLimiter = require('../middleware/rateLimiter');
 
-// All AI routes require authentication
-router.use(authenticate);
+// Chat endpoints (support both authenticated users and guests)
+router.post('/chat/stream', optionalAuth, aiCtrl.chatStream);
+router.post('/chat', optionalAuth, rateLimiter.ai, aiCtrl.chat);
 
-// Chat
-router.post('/chat', rateLimiter.ai, aiCtrl.chat);
+// Authenticated AI routes
+router.use(authenticate);
 
 // Conversations
 router.get('/conversations', aiCtrl.listConversations);

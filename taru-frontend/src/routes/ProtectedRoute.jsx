@@ -21,13 +21,15 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
   }
 
   // Logged in but wrong role
-  if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+  const currentRole = (role || '').toLowerCase()
+  const allowed = allowedRoles.map((r) => r.toLowerCase())
+  if (allowed.length > 0 && !allowed.includes(currentRole)) {
     const redirectMap = {
       buyer: '/',
       seller: '/seller/dashboard',
       admin: '/admin/dashboard',
     }
-    return <Navigate to={redirectMap[role] || '/'} replace />
+    return <Navigate to={redirectMap[currentRole] || '/'} replace />
   }
 
   return children

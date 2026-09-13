@@ -11,9 +11,12 @@ const listAddresses = async (req, res, next) => {
 
 const createAddress = async (req, res, next) => {
   try {
-    const { name, phone, line1, line2, city, state, pincode, label, isDefault } = req.body;
-    if (!name || !phone || !line1 || !city || !state || !pincode) {
-      throw new AppError('All required address fields must be provided', 400, 'MISSING_FIELDS');
+    let { name, phone, line1, line2, city, state, pincode, label, isDefault } = req.body;
+    name = name || req.user?.name || 'Customer';
+    phone = phone || req.user?.phone || '9999999999';
+
+    if (!line1 || !city || !state || !pincode) {
+      throw new AppError('Address line 1, city, state, and pincode are required', 400, 'MISSING_FIELDS');
     }
 
     if (isDefault) {
@@ -21,7 +24,7 @@ const createAddress = async (req, res, next) => {
     }
 
     const address = await Address.create({ userId: req.userId, name, phone, line1, line2, city, state, pincode, label, isDefault });
-    return created(res, address);
+    return created(res, { address });
   } catch (err) { next(err); }
 };
 

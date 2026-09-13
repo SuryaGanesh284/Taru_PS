@@ -1,10 +1,17 @@
 // Currency formatter
 export function formatCurrency(amount, currency = 'INR') {
+  if (amount === undefined || amount === null) return '₹0'
+  const val = typeof amount === 'object'
+    ? (amount.discountedAmount !== undefined && amount.discountedAmount !== null ? amount.discountedAmount : amount.amount)
+    : amount
+  const curr = (typeof amount === 'object' && amount.currency) ? amount.currency : currency
+  const numericVal = Number(val)
+  if (isNaN(numericVal)) return '₹0'
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency,
+    currency: curr,
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(numericVal)
 }
 
 // Date formatter

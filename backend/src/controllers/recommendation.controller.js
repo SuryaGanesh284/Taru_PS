@@ -12,6 +12,17 @@ const getRecommendations = async (req, res, next) => {
     const strategy = req.query.strategy || 'category_affinity';
     const limit = Math.min(20, parseInt(req.query.limit) || 10);
 
+    // Guest fallback (or user not logged in)
+    if (!req.userId) {
+      const products = await Product.find({ status: 'PUBLISHED' })
+        .sort({ rating: -1, totalSold: -1 })
+        .limit(limit)
+        .populate('categoryId', 'name slug')
+        .populate('sellerId', 'shgName location');
+
+      return success(res, { items: products, resolvedItems: products });
+    }
+
     // Check for cached recommendations
     const cached = await Recommendation.findOne({
       userId: req.userId,
@@ -19,7 +30,10 @@ const getRecommendations = async (req, res, next) => {
       expiresAt: { $gt: new Date() },
     }).populate('items.productId', 'title images price rating sellerId');
 
-    if (cached) return success(res, cached);
+    if (cached) {
+      const items = cached.items.map((i) => i.productId).filter(Boolean);
+      return success(res, { ...cached.toObject(), items, resolvedItems: items });
+    }
 
     // Generate recommendations based on user behavior
     const recentEvents = await Event.find({ userId: req.userId, type: { $in: ['product_view', 'cart_add', 'purchase'] } })
@@ -68,7 +82,7 @@ const getRecommendations = async (req, res, next) => {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     });
 
-    return success(res, { ...recommendation.toObject(), resolvedItems: products });
+    return success(res, { ...recommendation.toObject(), items: products, resolvedItems: products });
   } catch (err) { next(err); }
 };
 

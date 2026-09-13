@@ -115,27 +115,123 @@ const buildSystemPrompt = (user, intent, ragDocs) => {
 };
 
 /**
+ * POST /ai/chat/stream - Stream AI assistant response via SSE
+ */
+const chatStream = async (req, res, next) => {
+  const startTime = Date.now();
+  let intent = 'UNKNOWN';
+  const currentUser = req.user || { role: 'BUYER', name: 'Guest' };
+
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    if (res.flushHeaders) res.flushHeaders();
+
+    intent = classifyIntent(message);
+    const ragDocs = await retrieveKnowledge(message);
+
+    const toolsUsed = [];
+    const toolResults = {};
+
+    if (intent === 'PRODUCT_SEARCH') {
+      const result = await executeTool('searchProducts', { query: message }, currentUser);
+      toolsUsed.push('searchProducts');
+      toolResults.searchProducts = result;
+    } else if (intent === 'ORDER_STATUS' || intent === 'ORDER_CANCEL') {
+      if (req.user) {
+        const result = await executeTool('listOrders', {}, currentUser);
+        toolsUsed.push('listOrders');
+        toolResults.listOrders = result;
+      }
+    } else if (intent === 'PRODUCT_RECOMMEND') {
+      const result = await executeTool('getRecommendations', { limit: 5 }, currentUser);
+      toolsUsed.push('getRecommendations');
+      toolResults.getRecommendations = result;
+    }
+
+    let assistantContent = '';
+    const products = toolResults.searchProducts?.products || toolResults.getRecommendations?.products || [];
+
+    if (intent === 'PRODUCT_SEARCH' && products.length > 0) {
+      assistantContent = `I found ${products.length} product(s) for you. Here are the top results:\n${products.map((p, i) => `${i + 1}. ${p.title} - ₹${p.price?.amount || p.price}`).join('\n')}`;
+    } else if (intent === 'ORDER_STATUS' && toolResults.listOrders?.orders?.length > 0) {
+      const orders = toolResults.listOrders.orders;
+      assistantContent = `Here are your recent orders:\n${orders.map((o) => `• ${o.orderNumber}: ${o.status} (₹${o.pricing?.total})`).join('\n')}`;
+    } else if (intent === 'PRODUCT_RECOMMEND' && products.length > 0) {
+      assistantContent = `Based on popular items on our platform, here are my recommendations:\n${products.map((p, i) => `${i + 1}. ${p.title} - ₹${p.price?.amount || p.price} ⭐${p.rating || 5}`).join('\n')}`;
+    } else if (ragDocs.length > 0) {
+      assistantContent = `Based on our platform information: ${ragDocs[0].content.substring(0, 300)}`;
+    } else {
+      assistantContent = `I can help you explore rural artisanal products, check order status, or answer questions about our marketplace. What would you like to know?`;
+    }
+
+    const words = assistantContent.split(/(\s+)/);
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const payload = {
+        delta: word,
+        products: i === words.length - 1 && products.length > 0 ? products : undefined,
+      };
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      await new Promise((r) => setTimeout(r, 15));
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    if (req.userId) {
+      AiRun.create({
+        userId: req.userId,
+        intent,
+        route: intent,
+        model: process.env.LLM_PROVIDER || 'mock',
+        retrievalDocs: ragDocs.length,
+        tools: toolsUsed,
+        latencyMs: Date.now() - startTime,
+        success: true,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    logger.error(`AI stream error: ${err.message}`);
+    try {
+      res.write(`data: ${JSON.stringify({ delta: ' Sorry, an error occurred.' })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch {}
+  }
+};
+
+/**
  * POST /ai/chat - Start or continue an AI conversation
  */
 const chat = async (req, res, next) => {
   const startTime = Date.now();
   let conversationDoc = null;
   let intent = 'UNKNOWN';
+  const currentUser = req.user || { role: 'BUYER', name: 'Guest' };
 
   try {
-    const { message, conversationId, stream = false } = req.body;
+    const { message, conversationId } = req.body;
     if (!message || !message.trim()) throw new AppError('Message is required', 400, 'MISSING_MESSAGE');
 
-    // Get or create conversation
-    if (conversationId) {
-      conversationDoc = await Conversation.findOne({ _id: conversationId, userId: req.userId });
-      if (!conversationDoc) throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
-    } else {
-      conversationDoc = await Conversation.create({
-        userId: req.userId,
-        title: message.substring(0, 50),
-        messages: [],
-      });
+    // Get or create conversation if user is logged in
+    if (req.userId) {
+      if (conversationId) {
+        conversationDoc = await Conversation.findOne({ _id: conversationId, userId: req.userId });
+      }
+      if (!conversationDoc) {
+        conversationDoc = await Conversation.create({
+          userId: req.userId,
+          title: message.substring(0, 50),
+          messages: [],
+        });
+      }
     }
 
     // 1. Classify intent
@@ -145,92 +241,99 @@ const chat = async (req, res, next) => {
     const ragDocs = await retrieveKnowledge(message);
 
     // 3. Build system prompt
-    const systemPrompt = buildSystemPrompt(req.user, intent, ragDocs);
+    const systemPrompt = buildSystemPrompt(currentUser, intent, ragDocs);
 
     // 4. Determine tools to call
     const toolsUsed = [];
     const toolResults = {};
 
     if (intent === 'PRODUCT_SEARCH') {
-      const result = await executeTool('searchProducts', { query: message }, req.user);
+      const result = await executeTool('searchProducts', { query: message }, currentUser);
       toolsUsed.push('searchProducts');
       toolResults.searchProducts = result;
     } else if (intent === 'ORDER_STATUS' || intent === 'ORDER_CANCEL') {
-      const result = await executeTool('listOrders', {}, req.user);
-      toolsUsed.push('listOrders');
-      toolResults.listOrders = result;
+      if (req.user) {
+        const result = await executeTool('listOrders', {}, currentUser);
+        toolsUsed.push('listOrders');
+        toolResults.listOrders = result;
+      }
     } else if (intent === 'PRODUCT_RECOMMEND') {
-      const result = await executeTool('getRecommendations', { limit: 5 }, req.user);
+      const result = await executeTool('getRecommendations', { limit: 5 }, currentUser);
       toolsUsed.push('getRecommendations');
       toolResults.getRecommendations = result;
     }
 
-    // 5. Generate AI response (stub — replace with actual LLM call)
+    // 5. Generate AI response
     let assistantContent = '';
     const citations = ragDocs.map((doc) => ({ documentId: doc._id, title: doc.title, excerpt: doc.content.substring(0, 100) }));
+    const products = toolResults.searchProducts?.products || toolResults.getRecommendations?.products || [];
 
-    if (intent === 'PRODUCT_SEARCH' && toolResults.searchProducts?.products?.length > 0) {
-      const products = toolResults.searchProducts.products;
-      assistantContent = `I found ${products.length} product(s) for you. Here are the top results:\n${products.map((p, i) => `${i + 1}. ${p.title} - ₹${p.price?.amount}`).join('\n')}`;
+    if (intent === 'PRODUCT_SEARCH' && products.length > 0) {
+      assistantContent = `I found ${products.length} product(s) for you. Here are the top results:\n${products.map((p, i) => `${i + 1}. ${p.title} - ₹${p.price?.amount || p.price}`).join('\n')}`;
     } else if (intent === 'ORDER_STATUS' && toolResults.listOrders?.orders?.length > 0) {
       const orders = toolResults.listOrders.orders;
       assistantContent = `Here are your recent orders:\n${orders.map((o) => `• ${o.orderNumber}: ${o.status} (₹${o.pricing?.total})`).join('\n')}`;
-    } else if (intent === 'PRODUCT_RECOMMEND') {
-      const products = toolResults.getRecommendations?.products || [];
-      assistantContent = `Based on popular items on our platform, here are my recommendations:\n${products.map((p, i) => `${i + 1}. ${p.title} - ₹${p.price?.amount} ⭐${p.rating}`).join('\n')}`;
+    } else if (intent === 'PRODUCT_RECOMMEND' && products.length > 0) {
+      assistantContent = `Based on popular items on our platform, here are my recommendations:\n${products.map((p, i) => `${i + 1}. ${p.title} - ₹${p.price?.amount || p.price} ⭐${p.rating || 5}`).join('\n')}`;
     } else if (ragDocs.length > 0) {
       assistantContent = `Based on our platform information: ${ragDocs[0].content.substring(0, 300)}`;
     } else {
-      assistantContent = `I can help you with product search, order status, recommendations, and more. What would you like to know?`;
+      assistantContent = `I can help you explore rural artisanal products, check order status, or answer questions about our marketplace. How can I help you today?`;
     }
 
-    // 6. Save messages to conversation
-    conversationDoc.messages.push({ role: 'user', content: message, intent, timestamp: new Date() });
-    conversationDoc.messages.push({
-      role: 'assistant',
-      content: assistantContent,
-      intent,
-      citations,
-      toolCalls: toolsUsed.map((name) => ({ toolName: name, result: toolResults[name], executedAt: new Date() })),
-      timestamp: new Date(),
-    });
-    conversationDoc.lastIntent = intent;
-    await conversationDoc.save();
+    // 6. Save messages to conversation if user is logged in
+    if (conversationDoc) {
+      conversationDoc.messages.push({ role: 'user', content: message, intent, timestamp: new Date() });
+      conversationDoc.messages.push({
+        role: 'assistant',
+        content: assistantContent,
+        intent,
+        citations,
+        toolCalls: toolsUsed.map((name) => ({ toolName: name, result: toolResults[name], executedAt: new Date() })),
+        timestamp: new Date(),
+      });
+      conversationDoc.lastIntent = intent;
+      await conversationDoc.save();
+    }
 
     // 7. Track AI run for observability
-    AiRun.create({
-      userId: req.userId,
-      conversationId: conversationDoc._id,
-      intent,
-      route: intent,
-      model: process.env.LLM_PROVIDER || 'mock',
-      retrievalDocs: ragDocs.length,
-      tools: toolsUsed,
-      latencyMs: Date.now() - startTime,
-      success: true,
-    }).catch(() => {});
+    if (req.userId) {
+      AiRun.create({
+        userId: req.userId,
+        conversationId: conversationDoc?._id,
+        intent,
+        route: intent,
+        model: process.env.LLM_PROVIDER || 'mock',
+        retrievalDocs: ragDocs.length,
+        tools: toolsUsed,
+        latencyMs: Date.now() - startTime,
+        success: true,
+      }).catch(() => {});
 
-    // Track event
-    Event.create({ userId: req.userId, type: 'ai_chat', entityType: 'conversation', metadata: { intent } }).catch(() => {});
+      Event.create({ userId: req.userId, type: 'ai_chat', entityType: 'conversation', metadata: { intent } }).catch(() => {});
+    }
 
     return success(res, {
-      conversationId: conversationDoc._id,
+      conversationId: conversationDoc?._id,
+      reply: assistantContent,
       message: assistantContent,
       intent,
       citations,
       toolCalls: toolsUsed,
-      products: intent === 'PRODUCT_SEARCH' ? toolResults.searchProducts?.products : undefined,
-      recommendations: intent === 'PRODUCT_RECOMMEND' ? toolResults.getRecommendations?.products : undefined,
+      products: products.length > 0 ? products : undefined,
+      recommendations: intent === 'PRODUCT_RECOMMEND' ? products : undefined,
     });
   } catch (err) {
-    AiRun.create({
-      userId: req.userId,
-      conversationId: conversationDoc?._id,
-      intent,
-      latencyMs: Date.now() - startTime,
-      success: false,
-      error: err.message,
-    }).catch(() => {});
+    if (req.userId) {
+      AiRun.create({
+        userId: req.userId,
+        conversationId: conversationDoc?._id,
+        intent,
+        latencyMs: Date.now() - startTime,
+        success: false,
+        error: err.message,
+      }).catch(() => {});
+    }
     next(err);
   }
 };
@@ -411,7 +514,7 @@ const activatePromptVersion = async (req, res, next) => {
 };
 
 module.exports = {
-  chat, classifyIntentEndpoint, listConversations, getConversation, deleteConversation,
+  chat, chatStream, classifyIntentEndpoint, listConversations, getConversation, deleteConversation,
   listTools, executeSingleTool,
   createKnowledgeDoc, listKnowledgeDocs, getKnowledgeDoc, updateKnowledgeDoc, deleteKnowledgeDoc, searchKnowledge,
   listPromptVersions, createPromptVersion, activatePromptVersion,

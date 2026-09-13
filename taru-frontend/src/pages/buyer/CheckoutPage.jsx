@@ -4,12 +4,14 @@ import { MapPin, CreditCard, Plus, CheckCircle } from 'lucide-react'
 import PageWrapper from '../../components/common/PageWrapper.jsx'
 import Spinner from '../../components/common/Spinner.jsx'
 import { useCart } from '../../context/CartContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { orderAPI } from '../../api/orderAPI.jsx'
 import { formatCurrency } from '../../utils/formatters.jsx'
 import toast from 'react-hot-toast'
 
 export default function CheckoutPage() {
   const { items, totalPrice, clearCartLocal } = useCart()
+  const { user } = useAuth()
   const navigate = useNavigate()
 
   const [addresses, setAddresses] = useState([])
@@ -18,21 +20,42 @@ export default function CheckoutPage() {
   const [isPlacing, setIsPlacing] = useState(false)
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [addressForm, setAddressForm] = useState({
-    line1: '', line2: '', city: '', state: '', pincode: '', country: 'India',
+    name: user?.name || '',
+    phone: user?.phone || '',
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    pincode: '',
+    country: 'India',
   })
 
   useEffect(() => {
+    if (user) {
+      setAddressForm((prev) => ({
+        ...prev,
+        name: prev.name || user.name || '',
+        phone: prev.phone || user.phone || '',
+      }))
+    }
+  }, [user])
+
+  useEffect(() => {
     orderAPI.getAddresses().then((res) => {
-      const addrs = res.data.addresses || []
-      setAddresses(addrs)
-      if (addrs.length > 0) setSelectedAddress(addrs[0]._id)
+      const addrs = res.data.addresses || res.data || []
+      const list = Array.isArray(addrs) ? addrs : []
+      setAddresses(list)
+      if (list.length > 0) setSelectedAddress(list[0]._id)
     }).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (!selectedAddress || items.length === 0) return
     orderAPI
-      .getQuote({ addressId: selectedAddress, items: items.map((i) => ({ productId: i.product._id, quantity: i.quantity })) })
+      .getQuote({
+        addressId: selectedAddress,
+        items: items.map((i) => ({ productId: i.product?._id || i.productId || i._id, quantity: i.quantity || 1 })),
+      })
       .then((res) => setQuote(res.data))
       .catch(() => {})
   }, [selectedAddress, items])
@@ -41,7 +64,7 @@ export default function CheckoutPage() {
     e.preventDefault()
     try {
       const res = await orderAPI.createAddress(addressForm)
-      const newAddr = res.data.address
+      const newAddr = res.data.address || res.data
       setAddresses((prev) => [...prev, newAddr])
       setSelectedAddress(newAddr._id)
       setShowAddressForm(false)
@@ -55,13 +78,13 @@ export default function CheckoutPage() {
     try {
       const orderRes = await orderAPI.createOrder({
         addressId: selectedAddress,
-        items: items.map((i) => ({ productId: i.product._id, quantity: i.quantity })),
+        items: items.map((i) => ({ productId: i.product?._id || i.productId || i._id, quantity: i.quantity || 1 })),
       })
-      const order = orderRes.data.order
+      const order = orderRes.data.order || orderRes.data
 
       // Create payment intent
       const payRes = await orderAPI.createPaymentIntent({ orderId: order._id })
-      const { paymentUrl, paymentIntentId } = payRes.data
+      const { paymentUrl } = payRes.data || {}
 
       clearCartLocal()
       toast.success('Order placed! Redirecting to payment...')
@@ -135,6 +158,10 @@ export default function CheckoutPage() {
               {showAddressForm ? (
                 <form onSubmit={handleAddAddress} className="space-y-3 border-t pt-4">
                   <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <input name="name" value={addressForm.name} onChange={(e) => setAddressForm(p => ({...p, name: e.target.value}))} placeholder="Full Name" className="input-field text-sm" required />
+                      <input name="phone" value={addressForm.phone} onChange={(e) => setAddressForm(p => ({...p, phone: e.target.value}))} placeholder="Phone Number" className="input-field text-sm" required />
+                    </div>
                     <input name="line1" value={addressForm.line1} onChange={(e) => setAddressForm(p => ({...p, line1: e.target.value}))} placeholder="Address Line 1" className="input-field text-sm" required />
                     <input name="line2" value={addressForm.line2} onChange={(e) => setAddressForm(p => ({...p, line2: e.target.value}))} placeholder="Address Line 2 (optional)" className="input-field text-sm" />
                     <div className="grid grid-cols-2 gap-3">
@@ -162,22 +189,33 @@ export default function CheckoutPage() {
             <div className="card">
               <h2 className="font-semibold text-gray-800 mb-4">Items ({items.length})</h2>
               <div className="space-y-3">
-                {items.map((item) => (
-                  <div key={item.product._id} className="flex items-center gap-3">
-                    <img
-                      src={item.product.images?.[0]?.url || '/placeholder-product.jpg'}
-                      alt={item.product.title}
-                      className="w-12 h-12 rounded-lg object-cover bg-gray-100"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{item.product.title}</p>
-                      <p className="text-xs text-gray-400">Qty: {item.quantity}</p>
+                {items.map((item) => {
+                  const prod = item.product || {}
+                  const pId = prod._id || item.productId || item._id
+                  const title = prod.title || item.title || 'Product'
+                  const img = prod.images?.[0]?.url || item.imageUrl || '/placeholder-product.jpg'
+                  const price = typeof prod.price === 'number'
+                    ? prod.price
+                    : (prod.price?.discountedAmount ?? prod.price?.amount ?? item.price ?? 0)
+                  const qty = item.quantity || 1
+
+                  return (
+                    <div key={pId} className="flex items-center gap-3">
+                      <img
+                        src={img}
+                        alt={title}
+                        className="w-12 h-12 rounded-lg object-cover bg-gray-100"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{title}</p>
+                        <p className="text-xs text-gray-400">Qty: {qty}</p>
+                      </div>
+                      <span className="text-sm font-semibold">
+                        {formatCurrency(price * qty)}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold">
-                      {formatCurrency(item.product.price * item.quantity)}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </div>
