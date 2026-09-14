@@ -9,10 +9,20 @@ const { success, created, paginated } = require('../utils/response');
  */
 const createReview = async (req, res, next) => {
   try {
-    const { productId } = req.params;
+    const productId = req.params.productId || req.body.productId;
     const { orderId, rating, title, text, images } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) throw new AppError('Rating must be between 1 and 5', 400, 'INVALID_RATING');
+    const details = {};
+    if (!productId) details.productId = 'Product ID is required';
+    if (!orderId) details.orderId = 'Order ID is required';
+    if (rating === undefined || rating === null || isNaN(rating)) {
+      details.rating = 'Rating is required';
+    } else if (Number(rating) < 1 || Number(rating) > 5) {
+      details.rating = 'Rating must be between 1 and 5';
+    }
+    if (Object.keys(details).length > 0) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', details);
+    }
 
     // Verify the buyer actually purchased this product in this order
     const order = await Order.findOne({
