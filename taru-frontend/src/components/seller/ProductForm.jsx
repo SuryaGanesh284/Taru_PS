@@ -14,7 +14,13 @@ const defaultForm = {
   tags: '',
 }
 
-export default function ProductForm({ initialData = null, onSubmit, isLoading }) {
+export default function ProductForm({
+  initialData = null,
+  onSubmit,
+  isLoading,
+  categories: propCategories = null,
+  isCategoriesLoading = false,
+}) {
   const getInitialForm = () => {
     if (!initialData) return defaultForm
     const rawPrice = initialData.price
@@ -33,7 +39,9 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
   }
 
   const [form, setForm] = useState(getInitialForm)
-  const [categories, setCategories] = useState([])
+  const [categories, setCategories] = useState(() =>
+    Array.isArray(propCategories) ? propCategories : []
+  )
   const [mediaFiles, setMediaFiles] = useState([])
   const [previews, setPreviews] = useState(initialData?.images || [])
   const [errors, setErrors] = useState({})
@@ -46,6 +54,14 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
   }, [initialData])
 
   useEffect(() => {
+    if (Array.isArray(propCategories) && propCategories.length > 0) {
+      setCategories(propCategories)
+    }
+  }, [propCategories])
+
+  useEffect(() => {
+    if (Array.isArray(propCategories) && propCategories.length > 0) return
+
     productAPI.getCategories()
       .then((res) => {
         const raw = res?.data ?? res
@@ -61,7 +77,7 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
         setCategories(cats)
       })
       .catch(() => setCategories([]))
-  }, [])
+  }, [propCategories])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -86,7 +102,8 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
     if (!form.title.trim()) newErrors.title = 'Title is required.'
     if (!form.price || isNaN(form.price) || Number(form.price) <= 0)
       newErrors.price = 'Enter a valid price.'
-    if (!form.categoryId) newErrors.categoryId = 'Please select a category.'
+    if (!form.categoryId || !String(form.categoryId).trim())
+      newErrors.categoryId = 'Please select a category.'
     if (form.type === PRODUCT_TYPES.STANDARD && (!form.quantity || form.quantity < 0))
       newErrors.quantity = 'Enter a valid quantity.'
     return newErrors
@@ -101,6 +118,8 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
     }
     onSubmit({ ...form, mediaFiles })
   }
+
+  const categoryList = Array.isArray(categories) ? categories : []
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -153,25 +172,47 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="product-category" className="block text-sm font-medium text-gray-700 mb-1">
             Category <span className="text-red-500">*</span>
           </label>
           <select
+            id="product-category"
             name="categoryId"
             value={form.categoryId}
             onChange={handleChange}
-            className="input-field"
+            className={`input-field ${errors.categoryId ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}`}
+            aria-invalid={Boolean(errors.categoryId)}
+            aria-describedby={errors.categoryId ? 'category-error' : undefined}
           >
-            <option value="">Select category</option>
-            {Array.isArray(categories) &&
-              categories.map((cat) => (
-                <option key={cat._id} value={cat._id}>
-                  {cat.name}
+            <option value="">
+              {isCategoriesLoading ? 'Loading categories...' : 'Select category'}
+            </option>
+            {categoryList.length > 0 ? (
+              categoryList.map((cat) => {
+                const id =
+                  typeof cat === 'object' && cat !== null
+                    ? cat._id || cat.id || cat.slug || ''
+                    : String(cat)
+                const name =
+                  typeof cat === 'object' && cat !== null
+                    ? cat.name || cat.title || cat.label || cat.slug || ''
+                    : String(cat)
+                return (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                )
+              })
+            ) : (
+              !isCategoriesLoading && (
+                <option value="" disabled>
+                  No categories available
                 </option>
-              ))}
+              )
+            )}
           </select>
           {errors.categoryId && (
-            <p className="text-xs text-red-500 mt-1">{errors.categoryId}</p>
+            <p id="category-error" className="text-xs text-red-500 mt-1">{errors.categoryId}</p>
           )}
         </div>
       </div>

@@ -14,21 +14,35 @@ export const productAPI = {
   getTrending: () => axiosInstance.get('/search/trending'),
 
   getCategories: () =>
-    axiosInstance.get('/categories').then((res) => {
-      const items = Array.isArray(res.data?.data)
-        ? res.data.data
-        : Array.isArray(res.data?.categories)
-        ? res.data.categories
-        : Array.isArray(res.data?.items)
-        ? res.data.items
-        : Array.isArray(res.data)
-        ? res.data
-        : []
-      items.data = items
-      items.categories = items
-      items.items = items
-      return { ...res, data: items }
-    }),
+    axiosInstance
+      .get('/categories')
+      .then((res) => {
+        const raw = res?.data
+        let items = []
+        if (Array.isArray(raw)) {
+          items = raw
+        } else if (Array.isArray(raw?.data)) {
+          items = raw.data
+        } else if (Array.isArray(raw?.categories)) {
+          items = raw.categories
+        } else if (Array.isArray(raw?.items)) {
+          items = raw.items
+        } else if (Array.isArray(res)) {
+          items = res
+        }
+        items.data = items
+        items.categories = items
+        items.items = items
+        return { ...res, data: items, categories: items, items }
+      })
+      .catch((err) => {
+        console.error('Error fetching categories from backend:', err)
+        const fallback = []
+        fallback.data = fallback
+        fallback.categories = fallback
+        fallback.items = fallback
+        return { data: fallback, categories: fallback, items: fallback }
+      }),
 
   getCategory: (categoryId) => axiosInstance.get(`/categories/${categoryId}`),
 
