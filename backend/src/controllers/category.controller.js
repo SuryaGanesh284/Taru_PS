@@ -4,58 +4,58 @@ const { success, created, paginated } = require('../utils/response');
 
 const DEFAULT_CATEGORIES = [
   {
-    name: 'Handicrafts',
-    slug: 'handicrafts',
-    description: 'Traditional handcrafted items, artisan creations, and home decor',
+    name: 'Bamboo Crafts',
+    slug: 'bamboo-crafts',
+    description: 'Eco-friendly bamboo and cane baskets, homeware, furniture, and handicrafts',
     sortOrder: 1,
     active: true,
   },
   {
-    name: 'Pottery',
-    slug: 'pottery',
-    description: 'Handcrafted clay, terracotta pottery, and ceramic kitchenware',
+    name: 'Handloom',
+    slug: 'handloom',
+    description: 'Traditional handloom fabrics, sarees, dupattas, scarves, and artisanal textiles',
     sortOrder: 2,
-    active: true,
-  },
-  {
-    name: 'Textiles',
-    slug: 'textiles',
-    description: 'Traditional handloom fabrics, sarees, dupattas, and garments',
-    sortOrder: 3,
     active: true,
   },
   {
     name: 'Organic Food',
     slug: 'organic-food',
-    description: 'Naturally grown grains, spices, pickles, and honey',
+    description: 'Naturally grown grains, pulses, spices, organic pickles, and raw forest honey',
+    sortOrder: 3,
+    active: true,
+  },
+  {
+    name: 'Pottery',
+    slug: 'pottery',
+    description: 'Handcrafted clay cookware, terracotta pottery, and ceramic kitchenware',
     sortOrder: 4,
+    active: true,
+  },
+  {
+    name: 'Handicrafts',
+    slug: 'handicrafts',
+    description: 'Traditional handcrafted items, artisan creations, and rustic home decor',
+    sortOrder: 5,
     active: true,
   },
   {
     name: 'Jewellery',
     slug: 'jewellery',
-    description: 'Handmade ethnic jewellery, beads, and tribal ornaments',
-    sortOrder: 5,
-    active: true,
-  },
-  {
-    name: 'Bamboo Products',
-    slug: 'bamboo-products',
-    description: 'Eco-friendly bamboo and cane baskets, furniture, and decor',
+    description: 'Handmade ethnic jewellery, brass ornaments, terracotta beads, and tribal necklaces',
     sortOrder: 6,
     active: true,
   },
   {
     name: 'Jute Crafts',
     slug: 'jute-crafts',
-    description: 'Sustainable jute bags, wall hangings, and rugs',
+    description: 'Sustainable jute bags, wall hangings, table runners, and braided mats',
     sortOrder: 7,
     active: true,
   },
   {
     name: 'Woodcrafts',
     slug: 'woodcrafts',
-    description: 'Hand-carved wooden sculptures, kitchenware, and utilities',
+    description: 'Hand-carved wooden sculptures, kitchen utilities, and traditional artifacts',
     sortOrder: 8,
     active: true,
   },
@@ -95,6 +95,10 @@ const listCategories = async (req, res, next) => {
     }
 
     const safeCategories = Array.isArray(categories) ? categories : [];
+
+    if (req.query.format === 'array' || req.query.raw === 'true') {
+      return res.status(200).json(safeCategories);
+    }
 
     return res.status(200).json({
       success: true,

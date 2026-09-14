@@ -13,6 +13,18 @@ export const productAPI = {
 
   getTrending: () => axiosInstance.get('/search/trending'),
 
+  getSampleProducts: () =>
+    axiosInstance
+      .get('/products/samples')
+      .then((res) => {
+        const raw = res?.data
+        if (Array.isArray(raw)) return raw
+        if (Array.isArray(raw?.data)) return raw.data
+        if (Array.isArray(raw?.products)) return raw.products
+        return []
+      })
+      .catch(() => []),
+
   getCategories: () =>
     axiosInstance
       .get('/categories')

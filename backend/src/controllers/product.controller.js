@@ -385,8 +385,97 @@ const registerUniqueItem = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const SAMPLE_PRODUCTS = [
+  {
+    title: 'Handwoven Bamboo Basket',
+    categoryName: 'Bamboo Crafts',
+    categorySlug: 'bamboo-crafts',
+    price: { amount: 450, currency: 'INR' },
+    type: 'STANDARD',
+    quantity: 25,
+    description: 'Eco-friendly handwoven basket crafted from natural bamboo by skilled artisans. Durable, lightweight, and versatile for everyday storage or home decor.',
+    tags: ['bamboo', 'crafts', 'handmade', 'basket', 'eco-friendly'],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1596178065887-1198b6148b2b?w=800',
+        altText: 'Handwoven Bamboo Basket',
+        isPrimary: true,
+      },
+    ],
+  },
+  {
+    title: 'Organic Cotton Scarf',
+    categoryName: 'Handloom',
+    categorySlug: 'handloom',
+    price: { amount: 650, currency: 'INR' },
+    type: 'STANDARD',
+    quantity: 15,
+    description: 'Finely woven organic cotton scarf made on traditional wooden handlooms with natural plant-based dyes. Soft, breathable, and sustainably crafted.',
+    tags: ['handloom', 'organic', 'cotton', 'scarf', 'textile'],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?w=800',
+        altText: 'Organic Cotton Scarf',
+        isPrimary: true,
+      },
+    ],
+  },
+  {
+    title: 'Clay Pot Set',
+    categoryName: 'Pottery',
+    categorySlug: 'pottery',
+    price: { amount: 550, currency: 'INR' },
+    type: 'STANDARD',
+    quantity: 20,
+    description: 'Artisanal terracotta clay pot set made by traditional potters. Natural non-toxic cookware that retains heat and enhances food flavor.',
+    tags: ['pottery', 'clay', 'terracotta', 'cookware', 'handmade'],
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=800',
+        altText: 'Clay Pot Set',
+        isPrimary: true,
+      },
+    ],
+  },
+];
+
+/**
+ * GET /products/samples - Sample product templates for seller forms / quick-seed
+ */
+const getSampleProducts = async (req, res, next) => {
+  try {
+    const Category = require('../models/Category');
+    const categories = await Category.find({ active: true });
+    const categoryMap = {};
+    categories.forEach((c) => {
+      categoryMap[c.slug] = c;
+      categoryMap[c.name.toLowerCase()] = c;
+    });
+
+    const populatedSamples = SAMPLE_PRODUCTS.map((sample) => {
+      const cat = categoryMap[sample.categorySlug] || categoryMap[sample.categoryName.toLowerCase()];
+      return {
+        ...sample,
+        categoryId: cat ? cat._id : undefined,
+        category: cat ? { _id: cat._id, name: cat.name, slug: cat.slug } : undefined,
+      };
+    });
+
+    if (req.query.format === 'array' || req.query.raw === 'true') {
+      return res.status(200).json(populatedSamples);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: populatedSamples,
+      products: populatedSamples,
+      items: populatedSamples,
+    });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   listProducts, createProduct, getProduct, updateProduct, archiveProduct,
   publishProduct, unpublishProduct, attachMedia, deleteMedia, getInventory, updateInventory,
-  registerUniqueItem,
+  registerUniqueItem, getSampleProducts, SAMPLE_PRODUCTS,
 };

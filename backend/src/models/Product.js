@@ -61,9 +61,25 @@ const productSchema = new mongoose.Schema(
       width: { type: Number },
       height: { type: Number },
     },
+    slug: {
+      type: String,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
+
+productSchema.pre('validate', function (next) {
+  if (this.title && !this.slug) {
+    const baseSlug = typeof this.title === 'string'
+      ? this.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      : 'product';
+    this.slug = `${baseSlug}-${Date.now().toString(36)}`;
+  }
+  next();
+});
 
 // Text search index
 productSchema.index({ title: 'text', description: 'text', tags: 'text' });

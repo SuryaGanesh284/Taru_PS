@@ -1,8 +1,60 @@
 import { useState, useEffect } from 'react'
-import { Upload, X, Plus, Gem } from 'lucide-react'
+import { Upload, X, Plus, Gem, Sparkles } from 'lucide-react'
 import { productAPI } from '../../api/productAPI.jsx'
 import { PRODUCT_TYPES } from '../../utils/constants.jsx'
 import Spinner from '../common/Spinner.jsx'
+import toast from 'react-hot-toast'
+
+export const SAMPLE_PRODUCTS = [
+  {
+    title: 'Handwoven Bamboo Basket',
+    categoryName: 'Bamboo Crafts',
+    categorySlug: 'bamboo-crafts',
+    price: '450',
+    type: PRODUCT_TYPES.STANDARD,
+    quantity: '25',
+    description: 'Eco-friendly handwoven basket crafted from natural bamboo by skilled artisans. Durable, lightweight, and versatile for everyday storage or home decor.',
+    tags: 'bamboo, crafts, handmade, basket, eco-friendly',
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1596178065887-1198b6148b2b?w=800',
+        altText: 'Handwoven Bamboo Basket',
+      },
+    ],
+  },
+  {
+    title: 'Organic Cotton Scarf',
+    categoryName: 'Handloom',
+    categorySlug: 'handloom',
+    price: '650',
+    type: PRODUCT_TYPES.STANDARD,
+    quantity: '15',
+    description: 'Finely woven organic cotton scarf made on traditional wooden handlooms with natural plant-based dyes. Soft, breathable, and sustainably crafted.',
+    tags: 'handloom, organic, cotton, scarf, textile',
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1601924994987-69e26d50dc26?w=800',
+        altText: 'Organic Cotton Scarf',
+      },
+    ],
+  },
+  {
+    title: 'Clay Pot Set',
+    categoryName: 'Pottery',
+    categorySlug: 'pottery',
+    price: '550',
+    type: PRODUCT_TYPES.STANDARD,
+    quantity: '20',
+    description: 'Artisanal terracotta clay pot set made by traditional potters. Natural non-toxic cookware that retains heat and enhances food flavor.',
+    tags: 'pottery, clay, terracotta, cookware, handmade',
+    images: [
+      {
+        url: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=800',
+        altText: 'Clay Pot Set',
+      },
+    ],
+  },
+]
 
 const defaultForm = {
   title: '',
@@ -119,10 +171,81 @@ export default function ProductForm({
     onSubmit({ ...form, mediaFiles })
   }
 
-  const categoryList = Array.isArray(categories) ? categories : []
+  const categoryList = Array.isArray(categories)
+    ? categories
+    : Array.isArray(categories?.data)
+    ? categories.data
+    : Array.isArray(categories?.categories)
+    ? categories.categories
+    : Array.isArray(categories?.items)
+    ? categories.items
+    : []
+
+  const handleLoadSample = (sample) => {
+    const list = Array.isArray(categoryList) ? categoryList : []
+    const matchedCategory = list.find((cat) => {
+      const name = typeof cat === 'object' && cat ? (cat.name || cat.title || cat.slug || '') : String(cat)
+      const slug = typeof cat === 'object' && cat ? (cat.slug || '') : ''
+      return (
+        name.toLowerCase() === sample.categoryName.toLowerCase() ||
+        slug.toLowerCase() === sample.categorySlug.toLowerCase() ||
+        name.toLowerCase().includes(sample.categoryName.toLowerCase()) ||
+        sample.categoryName.toLowerCase().includes(name.toLowerCase())
+      )
+    })
+
+    const catId = matchedCategory
+      ? typeof matchedCategory === 'object'
+        ? matchedCategory._id || matchedCategory.id || matchedCategory.slug || ''
+        : String(matchedCategory)
+      : sample.categorySlug || ''
+
+    setForm((prev) => ({
+      ...prev,
+      title: sample.title,
+      description: sample.description,
+      price: sample.price,
+      categoryId: catId,
+      type: sample.type || PRODUCT_TYPES.STANDARD,
+      quantity: sample.quantity || '10',
+      tags: sample.tags || '',
+    }))
+
+    if (Array.isArray(sample.images) && sample.images.length > 0) {
+      setPreviews(sample.images)
+    }
+
+    setErrors({})
+    toast.success(`Loaded sample: ${sample.title}`)
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {/* Sample Data Quick-Fill */}
+      <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 bg-amber-200 text-amber-900 rounded-md">
+              <Sparkles className="h-3.5 w-3.5 text-amber-700" /> Sample Data
+            </span>
+            <span className="text-xs text-amber-900 font-medium">
+              Click to preview & auto-fill sample product details:
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {SAMPLE_PRODUCTS.map((sample) => (
+              <button
+                key={sample.title}
+                type="button"
+                onClick={() => handleLoadSample(sample)}
+                className="text-xs font-medium px-2.5 py-1 bg-white hover:bg-amber-100/80 border border-amber-300 text-amber-900 rounded-lg shadow-xs transition-colors cursor-pointer"
+              >
+                {sample.title} ({sample.categoryName})
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
       {/* Title */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -187,7 +310,7 @@ export default function ProductForm({
             <option value="">
               {isCategoriesLoading ? 'Loading categories...' : 'Select category'}
             </option>
-            {categoryList.length > 0 ? (
+            {Array.isArray(categoryList) && categoryList.length > 0 ? (
               categoryList.map((cat) => {
                 const id =
                   typeof cat === 'object' && cat !== null

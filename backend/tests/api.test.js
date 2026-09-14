@@ -182,6 +182,13 @@ describe('Full Backend API Integration Suite', () => {
       expect(Array.isArray(res2.body.data)).toBe(true);
     });
 
+    it('GET /api/v1/categories?format=array returns direct array of categories', async () => {
+      const res = await request(app).get('/api/v1/categories?format=array');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThan(0);
+    });
+
     it('GET /api/v1/categories/:id returns single category', async () => {
       const res = await request(app).get(`/api/v1/categories/${category._id}`);
       expect(res.status).toBe(200);
@@ -218,6 +225,17 @@ describe('Full Backend API Integration Suite', () => {
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data.length).toBeGreaterThan(0);
+    });
+
+    it('GET /api/v1/products/samples returns dummy sample products linked to categories', async () => {
+      const res = await request(app).get('/api/v1/products/samples');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBe(3);
+      const titles = res.body.data.map((p) => p.title);
+      expect(titles).toContain('Handwoven Bamboo Basket');
+      expect(titles).toContain('Organic Cotton Scarf');
+      expect(titles).toContain('Clay Pot Set');
     });
 
     it('GET /api/v1/products/:id returns product details', async () => {

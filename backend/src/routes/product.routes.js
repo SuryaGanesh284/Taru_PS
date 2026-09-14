@@ -12,6 +12,7 @@ const upload = multer({
 
 // Public reads (with optional auth for event tracking)
 router.get('/', optionalAuth, productCtrl.listProducts);
+router.get('/samples', productCtrl.getSampleProducts);
 router.get('/:productId', optionalAuth, productCtrl.getProduct);
 router.get('/:productId/inventory', authenticate, productCtrl.getInventory);
 
