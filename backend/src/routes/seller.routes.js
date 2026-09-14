@@ -6,11 +6,23 @@ const sellerCtrl = require('../controllers/seller.controller');
 // Seller-specific routes (require auth)
 router.post('/profile', authenticate, authorize('SELLER', 'BUYER'), sellerCtrl.createProfile);
 router.get('/me', authenticate, authorize('SELLER'), sellerCtrl.getMyProfile);
+router.get('/profile', authenticate, authorize('SELLER'), sellerCtrl.getMyProfile);
 router.patch('/me', authenticate, authorize('SELLER'), sellerCtrl.updateProfile);
+router.patch('/profile', authenticate, authorize('SELLER'), sellerCtrl.updateProfile);
 router.post('/me/verification', authenticate, authorize('SELLER'), sellerCtrl.submitVerification);
+router.post('/verification', authenticate, authorize('SELLER'), sellerCtrl.submitVerification);
+
+// Dashboard routes (support /me/dashboard, /dashboard)
 router.get('/me/dashboard', authenticate, authorize('SELLER'), sellerCtrl.getDashboard);
+router.get('/dashboard', authenticate, authorize('SELLER'), sellerCtrl.getDashboard);
+
+// Products routes (support /me/products, /products)
 router.get('/me/products', authenticate, authorize('SELLER'), sellerCtrl.getMyProducts);
+router.get('/products', authenticate, authorize('SELLER'), sellerCtrl.getMyProducts);
+
+// Analytics routes (support /me/analytics, /analytics)
 router.get('/me/analytics', authenticate, authorize('SELLER'), sellerCtrl.getAnalytics);
+router.get('/analytics', authenticate, authorize('SELLER'), sellerCtrl.getAnalytics);
 
 // Seller orders routes (support both /me/orders and /orders for compatibility)
 router.get('/me/orders', authenticate, authorize('SELLER'), sellerCtrl.getMyOrders);

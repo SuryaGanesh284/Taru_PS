@@ -61,7 +61,7 @@ export default function FilterSidebar({ filters, onChange, categories = [] }) {
       </div>
 
       {/* Category */}
-      {categories.length > 0 && (
+      {Array.isArray(categories) && categories.length > 0 && (
         <div className="card p-4">
           <button
             className="flex items-center justify-between w-full text-sm font-semibold text-gray-700 mb-2"

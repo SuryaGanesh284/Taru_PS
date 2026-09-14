@@ -30,7 +30,11 @@ export default function EditProductPage() {
         ...data,
         price: Number(data.price),
         quantity: Number(data.quantity),
-        tags: data.tags ? data.tags.split(',').map((t) => t.trim()) : [],
+        tags: typeof data.tags === 'string'
+          ? data.tags.split(',').map((t) => t.trim()).filter(Boolean)
+          : Array.isArray(data.tags)
+          ? data.tags
+          : [],
       })
 
       if (mediaFiles && mediaFiles.length > 0) {

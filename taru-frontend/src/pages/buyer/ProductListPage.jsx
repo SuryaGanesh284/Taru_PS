@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageWrapper from '../../components/common/PageWrapper.jsx'
 import ProductGrid from '../../components/buyer/ProductGrid.jsx'
@@ -28,7 +28,20 @@ export default function ProductListPage() {
   }
 
   useEffect(() => {
-    productAPI.getCategories().then((res) => setCategories(res.data || []))
+    productAPI
+      .getCategories()
+      .then((res) => {
+        const raw = res?.data ?? res
+        const cats = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.categories)
+          ? raw.categories
+          : Array.isArray(raw?.data)
+          ? raw.data
+          : []
+        setCategories(cats)
+      })
+      .catch(() => setCategories([]))
   }, [])
 
   useEffect(() => {

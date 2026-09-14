@@ -18,9 +18,13 @@ export default function AddProductPage() {
         ...data,
         price: Number(data.price),
         quantity: Number(data.quantity),
-        tags: data.tags ? data.tags.split(',').map((t) => t.trim()) : [],
+        tags: typeof data.tags === 'string'
+          ? data.tags.split(',').map((t) => t.trim()).filter(Boolean)
+          : Array.isArray(data.tags)
+          ? data.tags
+          : [],
       })
-      const productId = res.data.product._id
+      const productId = res.data?.product?._id || res.data?.data?._id || res.data?._id
 
       // Upload media if any
       if (mediaFiles && mediaFiles.length > 0) {

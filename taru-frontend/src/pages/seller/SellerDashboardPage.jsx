@@ -44,7 +44,7 @@ export default function SellerDashboardPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <StatsCard
                   title="Total Revenue"
-                  value={formatCurrency(dashboard?.revenue?.total || 0)}
+                  value={formatCurrency(dashboard?.revenue?.total ?? dashboard?.totalRevenue ?? 0)}
                   trend={dashboard?.revenue?.trend}
                   subtitle="vs last month"
                   icon={DollarSign}
@@ -52,7 +52,7 @@ export default function SellerDashboardPage() {
                 />
                 <StatsCard
                   title="Total Orders"
-                  value={dashboard?.orders?.total || 0}
+                  value={dashboard?.orders?.total ?? dashboard?.pendingOrders ?? 0}
                   trend={dashboard?.orders?.trend}
                   subtitle="vs last month"
                   icon={ShoppingBag}
@@ -60,15 +60,21 @@ export default function SellerDashboardPage() {
                 />
                 <StatsCard
                   title="Active Products"
-                  value={dashboard?.products?.active || 0}
-                  subtitle={`${dashboard?.products?.total || 0} total`}
+                  value={dashboard?.products?.active ?? dashboard?.totalProducts ?? 0}
+                  subtitle={`${dashboard?.products?.total ?? dashboard?.totalProducts ?? 0} total`}
                   icon={Package}
                   color="primary"
                 />
                 <StatsCard
                   title="Avg. Rating"
-                  value={dashboard?.rating?.average?.toFixed(1) || '—'}
-                  subtitle={`${dashboard?.rating?.total || 0} reviews`}
+                  value={
+                    dashboard?.rating?.average != null
+                      ? Number(dashboard.rating.average).toFixed(1)
+                      : dashboard?.rating != null && typeof dashboard?.rating === 'number'
+                      ? Number(dashboard.rating).toFixed(1)
+                      : '—'
+                  }
+                  subtitle={`${dashboard?.rating?.total ?? dashboard?.totalReviews ?? 0} reviews`}
                   icon={Star}
                   color="amber"
                 />
