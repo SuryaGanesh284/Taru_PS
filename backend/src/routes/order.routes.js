@@ -8,6 +8,7 @@ router.use(authenticate);
 router.get('/', orderCtrl.listOrders);
 router.get('/:orderId', orderCtrl.getOrder);
 router.post('/:orderId/cancel', orderCtrl.cancelOrder);
+router.post('/:orderId/reorder', orderCtrl.reorder);
 router.get('/:orderId/tracking', orderCtrl.getTracking);
 router.get('/:orderId/invoice', orderCtrl.getInvoice);
 router.post('/:orderId/invoice/regenerate', orderCtrl.regenerateInvoice);

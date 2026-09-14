@@ -10,7 +10,8 @@ const rateLimiter = require('../middleware/rateLimiter');
  */
 const createIntent = async (req, res, next) => {
   try {
-    const { orderId } = req.body;
+    const { orderId } = req.body || {};
+    if (!orderId) throw new AppError('Order ID is required', 400, 'MISSING_ORDER_ID');
 
     const order = await Order.findById(orderId);
     if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
