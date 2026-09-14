@@ -57,17 +57,27 @@ const createOrder = async (req, res, next) => {
   let session = null;
   let useTransaction = false;
 
-  try {
-    session = await mongoose.startSession();
-    session.startTransaction();
-    useTransaction = true;
-  } catch {
-    session = null;
-    useTransaction = false;
+  const topologyType = mongoose.connection?.client?.topology?.description?.type;
+  const supportsTransactions =
+    process.env.NODE_ENV !== 'test' &&
+    (topologyType === 'ReplicaSetWithPrimary' || topologyType === 'Sharded');
+
+  if (supportsTransactions) {
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      useTransaction = true;
+    } catch {
+      session = null;
+      useTransaction = false;
+    }
   }
 
   try {
-    const { addressId, notes, items: reqItems } = req.body;
+    const { addressId, notes, items: reqItems } = req.body || {};
+    if (!addressId) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { addressId: 'Delivery address is required' });
+    }
 
     const cartQuery = Cart.findOne({ buyerId: req.userId });
     if (useTransaction) cartQuery.session(session);

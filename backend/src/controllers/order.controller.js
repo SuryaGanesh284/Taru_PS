@@ -2,6 +2,8 @@ const Order = require('../models/Order');
 const InventoryItem = require('../models/InventoryItem');
 const Shipment = require('../models/Shipment');
 const Invoice = require('../models/Invoice');
+const Cart = require('../models/Cart');
+const Product = require('../models/Product');
 const { AppError } = require('../middleware/errorHandler');
 const { success, paginated } = require('../utils/response');
 
@@ -168,4 +170,50 @@ const regenerateInvoice = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { listOrders, getOrder, cancelOrder, getTracking, getInvoice, regenerateInvoice };
+/**
+  * POST /orders/:orderId/reorder - Add items from previous order to cart
+  */
+const reorder = async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.orderId);
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+
+    const isOwner = order.buyerId.toString() === req.userId;
+    const isAdmin = req.user.role === 'ADMIN';
+    if (!isOwner && !isAdmin) throw new AppError('Forbidden', 403, 'FORBIDDEN');
+
+    let cart = await Cart.findOne({ buyerId: req.userId });
+    if (!cart) cart = await Cart.create({ buyerId: req.userId, items: [] });
+
+    for (const item of order.items) {
+      const product = await Product.findById(item.productId);
+      if (product && product.status === 'PUBLISHED') {
+        const existingIdx = cart.items.findIndex(
+          (ci) => ci.productId.toString() === item.productId.toString()
+        );
+        const priceValue = typeof product.price === 'number'
+          ? product.price
+          : (product.price?.discountedAmount || product.price?.amount || 0);
+
+        if (existingIdx >= 0) {
+          cart.items[existingIdx].quantity += item.quantity || 1;
+        } else {
+          cart.items.push({
+            productId: product._id,
+            quantity: item.quantity || 1,
+            price: priceValue,
+            title: product.title,
+            imageUrl: product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url,
+            sellerId: product.sellerId,
+          });
+        }
+      }
+    }
+
+    cart.version += 1;
+    await cart.save();
+    return success(res, { message: 'Items added to cart', cart });
+  } catch (err) { next(err); }
+};
+
+module.exports = { listOrders, getOrder, cancelOrder, reorder, getTracking, getInvoice, regenerateInvoice };

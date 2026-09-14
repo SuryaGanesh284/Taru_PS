@@ -28,5 +28,7 @@ router.post('/:productId/unpublish', authenticate, authorize('SELLER'), productC
 router.post('/:productId/media', authenticate, authorize('SELLER'), upload.any(), productCtrl.attachMedia);
 router.delete('/:productId/media/:mediaId', authenticate, authorize('SELLER'), productCtrl.deleteMedia);
 router.put('/:productId/inventory', authenticate, authorize('SELLER'), productCtrl.updateInventory);
+router.patch('/:productId/inventory', authenticate, authorize('SELLER'), productCtrl.updateInventory);
+router.post('/:productId/unique-item', authenticate, authorize('SELLER'), productCtrl.registerUniqueItem);
 
 module.exports = router;

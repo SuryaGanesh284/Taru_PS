@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const SellerProfile = require('../models/SellerProfile');
 const User = require('../models/User');
 const Product = require('../models/Product');
@@ -74,9 +75,13 @@ const submitVerification = async (req, res, next) => {
  */
 const getPublicProfile = async (req, res, next) => {
   try {
-    const profile = await SellerProfile.findById(req.params.sellerId)
+    const { sellerId } = req.params;
+    if (!sellerId || !mongoose.Types.ObjectId.isValid(sellerId)) {
+      throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+    }
+    const profile = await SellerProfile.findById(sellerId)
       .populate('userId', 'name avatarUrl')
-      .select('-bankAccount -verificationDocuments');
+      .select('-verificationDocuments');
     if (!profile || !profile.isActive) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     return success(res, profile);
   } catch (err) { next(err); }

@@ -1,7 +1,10 @@
 const rateLimit = require('express-rate-limit');
 
-const createLimiter = (options) =>
-  rateLimit({
+const createLimiter = (options) => {
+  if (process.env.NODE_ENV === 'test') {
+    return (req, res, next) => next();
+  }
+  return rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {
@@ -15,6 +18,7 @@ const createLimiter = (options) =>
     },
     ...options,
   });
+};
 
 const rateLimiter = {
   // Default: 100 requests per minute per IP

@@ -58,12 +58,16 @@ const register = async ({ name, email, phone, password, role = 'BUYER' }) => {
     throw new AppError('User already exists with this email or phone', 409, 'USER_EXISTS');
   }
 
+  const normalizedRole = role ? String(role).toUpperCase() : 'BUYER';
+  const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : undefined;
+  const cleanPhone = phone && typeof phone === 'string' && phone.trim() ? phone.trim() : undefined;
+
   const user = await User.create({
-    name,
-    email: email || undefined,
-    phone: phone || undefined,
+    name: name.trim(),
+    email: cleanEmail,
+    phone: cleanPhone,
     passwordHash: password, // pre-save hook will hash
-    role: ['BUYER', 'SELLER'].includes(role) ? role : 'BUYER',
+    role: ['BUYER', 'SELLER', 'ADMIN'].includes(normalizedRole) ? normalizedRole : 'BUYER',
   });
 
   return user;
@@ -188,4 +192,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyAccessToken,
+  signAccessToken,
+  signRefreshToken,
 };

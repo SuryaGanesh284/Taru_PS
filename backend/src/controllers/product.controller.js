@@ -58,10 +58,37 @@ const createProduct = async (req, res, next) => {
     }
 
     const payload = { ...req.body, sellerId: profile._id };
-    if (typeof payload.price === 'number') {
-      payload.price = { amount: payload.price, currency: 'INR' };
+
+    const details = {};
+    if (!payload.title || !String(payload.title).trim()) details.title = 'Title is required';
+    if (!payload.categoryId) details.categoryId = 'Category is required';
+    if (payload.price === undefined || payload.price === null || payload.price === '') {
+      details.price = 'Price is required';
     }
+    if (Object.keys(details).length > 0) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', details);
+    }
+
+    if (typeof payload.price === 'number') {
+      if (payload.price < 0) throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { price: 'Price must be positive' });
+      payload.price = { amount: payload.price, currency: 'INR' };
+    } else if (typeof payload.price === 'string') {
+      const num = parseFloat(payload.price);
+      if (isNaN(num) || num < 0) {
+        throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { price: 'Price must be a valid positive number' });
+      }
+      payload.price = { amount: num, currency: 'INR' };
+    } else if (payload.price && typeof payload.price === 'object') {
+      const amount = Number(payload.price.amount);
+      if (isNaN(amount) || amount < 0) {
+        throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { price: 'Price must be a valid positive number' });
+      }
+      payload.price = { amount, currency: payload.price.currency || 'INR' };
+    }
+
     const stockQty = payload.initialStock !== undefined ? Number(payload.initialStock) : Number(payload.quantity || 0);
+    delete payload.quantity;
+    delete payload.initialStock;
 
     const product = await Product.create(payload);
 
@@ -78,11 +105,11 @@ const createProduct = async (req, res, next) => {
       await InventoryItem.create({
         productId: product._id,
         sku: `${product._id}-STD-1`,
-        quantity: stockQty,
+        quantity: isNaN(stockQty) ? 0 : Math.max(0, stockQty),
       });
     }
 
-    return created(res, product);
+    return success(res, product);
   } catch (err) { next(err); }
 };
 
@@ -136,8 +163,23 @@ const updateProduct = async (req, res, next) => {
     const updates = {};
     allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
-    if (updates.price !== undefined && typeof updates.price === 'number') {
-      updates.price = { amount: updates.price, currency: 'INR' };
+    if (updates.price !== undefined) {
+      if (typeof updates.price === 'number') {
+        if (updates.price < 0) throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { price: 'Price must be positive' });
+        updates.price = { amount: updates.price, currency: 'INR' };
+      } else if (typeof updates.price === 'string') {
+        const num = parseFloat(updates.price);
+        if (isNaN(num) || num < 0) {
+          throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { price: 'Price must be a valid positive number' });
+        }
+        updates.price = { amount: num, currency: 'INR' };
+      } else if (typeof updates.price === 'object' && updates.price !== null) {
+        const amount = Number(updates.price.amount);
+        if (isNaN(amount) || amount < 0) {
+          throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { price: 'Price must be a valid positive number' });
+        }
+        updates.price = { amount, currency: updates.price.currency || 'INR' };
+      }
     }
 
     // Status resets to DRAFT on edit if published
@@ -285,9 +327,6 @@ const getInventory = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-/**
- * PUT /products/:productId/inventory - Update inventory for a product
- */
 const updateInventory = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.productId);
@@ -298,13 +337,50 @@ const updateInventory = async (req, res, next) => {
       throw new AppError('Forbidden', 403, 'FORBIDDEN');
     }
 
-    const { sku, quantity, costPrice, location } = req.body;
+    const { sku, quantity, costPrice, location } = req.body || {};
+    const targetSku = sku || `${product._id}-STD-1`;
+    const numQty = quantity !== undefined ? Number(quantity) : 0;
+    if (isNaN(numQty) || numQty < 0) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { quantity: 'Quantity must be a non-negative number' });
+    }
 
     const item = await InventoryItem.findOneAndUpdate(
-      { productId: product._id, sku },
-      { quantity, costPrice, location },
+      { productId: product._id, sku: targetSku },
+      { quantity: numQty, costPrice, location },
       { new: true, upsert: true }
     );
+    return success(res, item);
+  } catch (err) { next(err); }
+};
+
+/**
+ * POST /products/:productId/unique-item - Register unique item
+ */
+const registerUniqueItem = async (req, res, next) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+
+    const profile = await SellerProfile.findOne({ userId: req.userId });
+    if (!profile || product.sellerId.toString() !== profile._id.toString()) {
+      throw new AppError('Forbidden', 403, 'FORBIDDEN');
+    }
+
+    const { uniqueItemId, sku, costPrice, location, attributes } = req.body || {};
+    const generatedId = uniqueItemId || `${product._id}-${Date.now()}`;
+    const generatedSku = sku || `${product._id}-UNIQUE-${Date.now()}`;
+
+    const item = await InventoryItem.create({
+      productId: product._id,
+      sku: generatedSku,
+      uniqueItemId: generatedId,
+      quantity: 1,
+      costPrice,
+      location,
+      status: 'AVAILABLE',
+      metadata: attributes || {},
+    });
+
     return success(res, item);
   } catch (err) { next(err); }
 };
@@ -312,4 +388,5 @@ const updateInventory = async (req, res, next) => {
 module.exports = {
   listProducts, createProduct, getProduct, updateProduct, archiveProduct,
   publishProduct, unpublishProduct, attachMedia, deleteMedia, getInventory, updateInventory,
+  registerUniqueItem,
 };

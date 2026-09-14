@@ -57,6 +57,13 @@ const getCart = async (req, res, next) => {
 const addItem = async (req, res, next) => {
   try {
     const { productId, quantity = 1, inventoryItemId } = req.body;
+    if (!productId) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { productId: 'Product ID is required' });
+    }
+    const numQty = Number(quantity);
+    if (isNaN(numQty) || numQty < 1) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { quantity: 'Quantity must be at least 1' });
+    }
 
     const product = await Product.findById(productId);
     if (!product || product.status !== 'PUBLISHED') {
@@ -69,7 +76,7 @@ const addItem = async (req, res, next) => {
     const inventory = await InventoryItem.findOne(inventoryQuery);
 
     if (!inventory) throw new AppError('Product is out of stock', 409, 'OUT_OF_STOCK');
-    if (product.type !== 'UNIQUE' && inventory.quantity - inventory.reserved < quantity) {
+    if (product.type !== 'UNIQUE' && inventory.quantity - inventory.reserved < numQty) {
       throw new AppError('Insufficient stock', 409, 'INSUFFICIENT_STOCK');
     }
 
@@ -90,12 +97,12 @@ const addItem = async (req, res, next) => {
       if (product.type === 'UNIQUE') {
         throw new AppError('Unique item already in cart', 409, 'ALREADY_IN_CART');
       }
-      cart.items[existingItemIdx].quantity += quantity;
+      cart.items[existingItemIdx].quantity += numQty;
     } else {
       cart.items.push({
         productId,
         inventoryItemId: product.type === 'UNIQUE' ? inventoryItemId : undefined,
-        quantity,
+        quantity: numQty,
         price: priceValue,
         title: product.title,
         imageUrl: product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url,
@@ -120,18 +127,26 @@ const addItem = async (req, res, next) => {
 const updateItem = async (req, res, next) => {
   try {
     const { quantity } = req.body;
-    if (!quantity || quantity < 1) throw new AppError('Invalid quantity', 400, 'INVALID_QUANTITY');
+    const numQty = Number(quantity);
+    if (quantity === undefined || isNaN(numQty) || numQty < 0) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', { quantity: 'Quantity must be a non-negative number' });
+    }
 
     const cart = await Cart.findOne({ buyerId: req.userId });
     if (!cart) throw new AppError('Cart not found', 404, 'CART_NOT_FOUND');
 
-    const targetId = req.params.itemId;
-    const item = cart.items.id(targetId) || cart.items.find(
-      (i) => i.productId.toString() === targetId || i._id.toString() === targetId
+    const targetId = String(req.params.itemId);
+    const item = cart.items.find(
+      (i) => i.productId?.toString() === targetId || i._id?.toString() === targetId
     );
     if (!item) throw new AppError('Item not in cart', 404, 'ITEM_NOT_FOUND');
 
-    item.quantity = quantity;
+    if (numQty === 0) {
+      cart.items.pull(item._id);
+    } else {
+      item.quantity = numQty;
+    }
+
     cart.version += 1;
     await cart.save();
     await cart.populate('items.productId', 'title images price status type sellerId');
@@ -147,9 +162,9 @@ const removeItem = async (req, res, next) => {
     const cart = await Cart.findOne({ buyerId: req.userId });
     if (!cart) throw new AppError('Cart not found', 404, 'CART_NOT_FOUND');
 
-    const targetId = req.params.itemId;
-    const item = cart.items.id(targetId) || cart.items.find(
-      (i) => i.productId.toString() === targetId || i._id.toString() === targetId
+    const targetId = String(req.params.itemId);
+    const item = cart.items.find(
+      (i) => i.productId?.toString() === targetId || i._id?.toString() === targetId
     );
     if (!item) throw new AppError('Item not in cart', 404, 'ITEM_NOT_FOUND');
 

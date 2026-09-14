@@ -3,7 +3,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const RefreshSession = require('../models/RefreshSession');
-const { success, noContent } = require('../utils/response');
+const { success } = require('../utils/response');
 const { AppError } = require('../middleware/errorHandler');
 
 // ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ const revokeSession = async (req, res, next) => {
     session.revokedAt = new Date();
     await session.save();
 
-    return noContent(res);
+    return success(res, { message: 'Session revoked successfully' });
   } catch (err) {
     next(err);
   }
