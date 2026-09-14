@@ -14,7 +14,14 @@ const listCategories = async (req, res, next) => {
       .sort({ sortOrder: 1, name: 1 })
       .populate('parentId', 'name slug');
 
-    return success(res, categories);
+    return res.status(200).json({
+      data: categories,
+      categories,
+      items: categories,
+      meta: {
+        requestId: res.req?.requestId,
+      },
+    });
   } catch (err) { next(err); }
 };
 

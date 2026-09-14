@@ -20,11 +20,15 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
     const rawPrice = initialData.price
     const price = typeof rawPrice === 'object' && rawPrice !== null ? (rawPrice.amount ?? '') : (rawPrice ?? '')
     const categoryId = initialData.categoryId?._id || initialData.categoryId || initialData.category?._id || initialData.category || ''
+    const tags = Array.isArray(initialData.tags)
+      ? initialData.tags.join(', ')
+      : (initialData.tags || '')
     return {
       ...defaultForm,
       ...initialData,
       price,
       categoryId,
+      tags,
     }
   }
 
@@ -35,7 +39,28 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
   const [errors, setErrors] = useState({})
 
   useEffect(() => {
-    productAPI.getCategories().then((res) => setCategories(res.data || []))
+    if (initialData) {
+      setForm(getInitialForm())
+      setPreviews(initialData.images || [])
+    }
+  }, [initialData])
+
+  useEffect(() => {
+    productAPI.getCategories()
+      .then((res) => {
+        const raw = res?.data ?? res
+        const cats = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.data)
+          ? raw.data
+          : Array.isArray(raw?.categories)
+          ? raw.categories
+          : Array.isArray(raw?.items)
+          ? raw.items
+          : []
+        setCategories(cats)
+      })
+      .catch(() => setCategories([]))
   }, [])
 
   const handleChange = (e) => {
@@ -138,11 +163,12 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
             className="input-field"
           >
             <option value="">Select category</option>
-            {categories.map((cat) => (
-              <option key={cat._id} value={cat._id}>
-                {cat.name}
-              </option>
-            ))}
+            {Array.isArray(categories) &&
+              categories.map((cat) => (
+                <option key={cat._id} value={cat._id}>
+                  {cat.name}
+                </option>
+              ))}
           </select>
           {errors.categoryId && (
             <p className="text-xs text-red-500 mt-1">{errors.categoryId}</p>
