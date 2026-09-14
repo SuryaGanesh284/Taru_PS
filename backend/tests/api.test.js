@@ -157,6 +157,8 @@ describe('Full Backend API Integration Suite', () => {
       const res = await request(app).get('/api/v1/categories');
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
+      expect(Array.isArray(res.body.categories)).toBe(true);
+      expect(Array.isArray(res.body.items)).toBe(true);
       expect(res.body.data.length).toBeGreaterThan(0);
     });
 
@@ -287,6 +289,59 @@ describe('Full Backend API Integration Suite', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.description).toBe('Updated SHG description');
+    });
+
+    it('GET /api/v1/sellers/me/dashboard returns seller dashboard stats with 200 OK', async () => {
+      const res = await request(app)
+        .get('/api/v1/sellers/me/dashboard')
+        .set('Authorization', `Bearer ${sellerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.revenue).toBeDefined();
+      expect(res.body.data.orders).toBeDefined();
+      expect(res.body.data.products).toBeDefined();
+      expect(res.body.data.rating).toBeDefined();
+    });
+
+    it('GET /api/v1/sellers/me/analytics returns seller analytics with 200 OK', async () => {
+      const res = await request(app)
+        .get('/api/v1/sellers/me/analytics')
+        .set('Authorization', `Bearer ${sellerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.revenue).toBeDefined();
+      expect(res.body.data.orders).toBeDefined();
+      expect(Array.isArray(res.body.data.topProducts)).toBe(true);
+      expect(Array.isArray(res.body.data.monthlyRevenue)).toBe(true);
+    });
+
+    it('GET /api/v1/sellers/me/products returns seller product list with 200 OK', async () => {
+      const res = await request(app)
+        .get('/api/v1/sellers/me/products')
+        .set('Authorization', `Bearer ${sellerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(Array.isArray(res.body.products)).toBe(true);
+    });
+
+    it('GET /api/v1/seller/orders returns seller orders with 200 OK', async () => {
+      const res = await request(app)
+        .get('/api/v1/seller/orders')
+        .set('Authorization', `Bearer ${sellerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(Array.isArray(res.body.orders)).toBe(true);
+    });
+
+    it('GET /api/v1/seller/dashboard alias works without 404', async () => {
+      const res = await request(app)
+        .get('/api/v1/seller/dashboard')
+        .set('Authorization', `Bearer ${sellerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.revenue).toBeDefined();
     });
   });
 
