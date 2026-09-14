@@ -45,7 +45,7 @@ const register = async (req, res, next) => {
 
     res.cookie(COOKIE_NAME, refreshToken, cookieOptions);
 
-    return created(res, {
+    return success(res, {
       user: user.toJSON(),
       accessToken,
     });
@@ -79,11 +79,15 @@ const login = async (req, res, next) => {
 /**
  * POST /auth/refresh
  * Exchange a valid refresh token for a new access token.
- * Reads from cookie first, falls back to body.
+ * Reads from cookie first, falls back to body or header.
  */
 const refresh = async (req, res, next) => {
   try {
-    const token = req.cookies?.[COOKIE_NAME] || req.body?.refreshToken;
+    const token =
+      req.cookies?.[COOKIE_NAME] ||
+      req.body?.refreshToken ||
+      req.body?.token ||
+      req.headers['x-refresh-token'];
     if (!token) {
       throw new AppError('Refresh token is required', 400, 'MISSING_REFRESH_TOKEN');
     }
@@ -102,7 +106,11 @@ const refresh = async (req, res, next) => {
  */
 const logout = async (req, res, next) => {
   try {
-    const token = req.cookies?.[COOKIE_NAME] || req.body?.refreshToken;
+    const token =
+      req.cookies?.[COOKIE_NAME] ||
+      req.body?.refreshToken ||
+      req.body?.token ||
+      req.headers['x-refresh-token'];
     await authService.logout(token); // best-effort; ignores invalid tokens
 
     res.clearCookie(COOKIE_NAME, clearCookieOptions);
