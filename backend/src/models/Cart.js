@@ -31,6 +31,5 @@ cartSchema.virtual('subtotal').get(function () {
   return this.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 });
 
-cartSchema.index({ buyerId: 1 });
-
 module.exports = mongoose.model('Cart', cartSchema);
+

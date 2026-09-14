@@ -60,7 +60,4 @@ invoiceSchema.pre('save', async function (next) {
   next();
 });
 
-invoiceSchema.index({ orderId: 1 });
-invoiceSchema.index({ invoiceNumber: 1 });
-
 module.exports = mongoose.model('Invoice', invoiceSchema);

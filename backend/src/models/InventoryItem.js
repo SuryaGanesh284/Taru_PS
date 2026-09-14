@@ -52,7 +52,6 @@ const inventoryItemSchema = new mongoose.Schema(
 );
 
 inventoryItemSchema.index({ productId: 1 });
-inventoryItemSchema.index({ uniqueItemId: 1 });
 inventoryItemSchema.index({ productId: 1, status: 1 });
 inventoryItemSchema.index({ sku: 1, productId: 1 });
 

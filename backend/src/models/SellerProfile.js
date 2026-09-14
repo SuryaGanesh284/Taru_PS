@@ -57,7 +57,6 @@ const sellerProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-sellerProfileSchema.index({ userId: 1 });
 sellerProfileSchema.index({ verificationStatus: 1 });
 sellerProfileSchema.index({ 'location.district': 1, 'location.state': 1 });
 
