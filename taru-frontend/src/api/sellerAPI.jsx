@@ -18,6 +18,8 @@ export const sellerAPI = {
   getAnalytics: () => axiosInstance.get('/sellers/me/analytics'),
 
   // Seller products
+  getCategories: () => axiosInstance.get('/categories'),
+
   getMyProducts: (params) =>
     axiosInstance.get('/sellers/me/products', { params }),
 

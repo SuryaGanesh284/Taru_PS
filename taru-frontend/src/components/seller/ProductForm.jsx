@@ -14,7 +14,13 @@ const defaultForm = {
   tags: '',
 }
 
-export default function ProductForm({ initialData = null, onSubmit, isLoading }) {
+export default function ProductForm({
+  initialData = null,
+  onSubmit,
+  isLoading,
+  categories: propCategories = null,
+  isCategoriesLoading = false,
+}) {
   const getInitialForm = () => {
     if (!initialData) return defaultForm
     const rawPrice = initialData.price
@@ -33,7 +39,9 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
   }
 
   const [form, setForm] = useState(getInitialForm)
-  const [categories, setCategories] = useState([])
+  const [categories, setCategories] = useState(() =>
+    Array.isArray(propCategories) ? propCategories : []
+  )
   const [mediaFiles, setMediaFiles] = useState([])
   const [previews, setPreviews] = useState(initialData?.images || [])
   const [errors, setErrors] = useState({})
@@ -46,6 +54,14 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
   }, [initialData])
 
   useEffect(() => {
+    if (Array.isArray(propCategories) && propCategories.length > 0) {
+      setCategories(propCategories)
+    }
+  }, [propCategories])
+
+  useEffect(() => {
+    if (Array.isArray(propCategories) && propCategories.length > 0) return
+
     productAPI.getCategories()
       .then((res) => {
         const raw = res?.data ?? res
@@ -61,7 +77,7 @@ export default function ProductForm({ initialData = null, onSubmit, isLoading })
         setCategories(cats)
       })
       .catch(() => setCategories([]))
-  }, [])
+  }, [propCategories])
 
   const handleChange = (e) => {
     const { name, value } = e.target
