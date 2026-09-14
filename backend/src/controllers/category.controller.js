@@ -2,6 +2,65 @@ const Category = require('../models/Category');
 const { AppError } = require('../middleware/errorHandler');
 const { success, created, paginated } = require('../utils/response');
 
+const DEFAULT_CATEGORIES = [
+  {
+    name: 'Handicrafts',
+    slug: 'handicrafts',
+    description: 'Traditional handcrafted items, artisan creations, and home decor',
+    sortOrder: 1,
+    active: true,
+  },
+  {
+    name: 'Pottery',
+    slug: 'pottery',
+    description: 'Handcrafted clay, terracotta pottery, and ceramic kitchenware',
+    sortOrder: 2,
+    active: true,
+  },
+  {
+    name: 'Textiles',
+    slug: 'textiles',
+    description: 'Traditional handloom fabrics, sarees, dupattas, and garments',
+    sortOrder: 3,
+    active: true,
+  },
+  {
+    name: 'Organic Food',
+    slug: 'organic-food',
+    description: 'Naturally grown grains, spices, pickles, and honey',
+    sortOrder: 4,
+    active: true,
+  },
+  {
+    name: 'Jewellery',
+    slug: 'jewellery',
+    description: 'Handmade ethnic jewellery, beads, and tribal ornaments',
+    sortOrder: 5,
+    active: true,
+  },
+  {
+    name: 'Bamboo Products',
+    slug: 'bamboo-products',
+    description: 'Eco-friendly bamboo and cane baskets, furniture, and decor',
+    sortOrder: 6,
+    active: true,
+  },
+  {
+    name: 'Jute Crafts',
+    slug: 'jute-crafts',
+    description: 'Sustainable jute bags, wall hangings, and rugs',
+    sortOrder: 7,
+    active: true,
+  },
+  {
+    name: 'Woodcrafts',
+    slug: 'woodcrafts',
+    description: 'Hand-carved wooden sculptures, kitchenware, and utilities',
+    sortOrder: 8,
+    active: true,
+  },
+];
+
 /**
  * GET /categories - List all categories (with optional parent filter)
  */
@@ -10,16 +69,41 @@ const listCategories = async (req, res, next) => {
     const filter = { active: true };
     if (req.query.parentId) filter.parentId = req.query.parentId === 'root' ? null : req.query.parentId;
 
-    const categories = await Category.find(filter)
+    let categories = await Category.find(filter)
       .sort({ sortOrder: 1, name: 1 })
       .populate('parentId', 'name slug');
 
+    // If no categories found and querying root / active categories, auto-seed defaults into DB
+    if ((!categories || categories.length === 0) && (!req.query.parentId || req.query.parentId === 'root')) {
+      try {
+        const totalCount = await Category.countDocuments();
+        if (totalCount === 0) {
+          await Category.insertMany(DEFAULT_CATEGORIES);
+          categories = await Category.find(filter)
+            .sort({ sortOrder: 1, name: 1 })
+            .populate('parentId', 'name slug');
+        }
+      } catch (seedErr) {
+        // Fallback in case of DB read-only or index constraint
+        if (!categories || categories.length === 0) {
+          categories = DEFAULT_CATEGORIES.map((c, index) => ({
+            _id: `default-cat-${index + 1}`,
+            ...c,
+          }));
+        }
+      }
+    }
+
+    const safeCategories = Array.isArray(categories) ? categories : [];
+
     return res.status(200).json({
-      data: categories,
-      categories,
-      items: categories,
+      success: true,
+      data: safeCategories,
+      categories: safeCategories,
+      items: safeCategories,
       meta: {
         requestId: res.req?.requestId,
+        total: safeCategories.length,
       },
     });
   } catch (err) { next(err); }
@@ -77,4 +161,4 @@ const deactivateCategory = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { listCategories, getCategory, createCategory, updateCategory, deactivateCategory };
+module.exports = { listCategories, getCategory, createCategory, updateCategory, deactivateCategory, DEFAULT_CATEGORIES };

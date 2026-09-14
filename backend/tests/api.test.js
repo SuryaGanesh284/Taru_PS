@@ -162,6 +162,26 @@ describe('Full Backend API Integration Suite', () => {
       expect(res.body.data.length).toBeGreaterThan(0);
     });
 
+    it('GET /api/v1/categories auto-seeds defaults if collection is empty', async () => {
+      await Category.deleteMany({});
+      const res = await request(app).get('/api/v1/categories');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThan(0);
+      const seeded = await Category.find({});
+      expect(seeded.length).toBeGreaterThan(0);
+    });
+
+    it('GET /api/v1/category and /categories route aliases work', async () => {
+      const res1 = await request(app).get('/api/v1/category');
+      expect(res1.status).toBe(200);
+      expect(Array.isArray(res1.body.data)).toBe(true);
+
+      const res2 = await request(app).get('/categories');
+      expect(res2.status).toBe(200);
+      expect(Array.isArray(res2.body.data)).toBe(true);
+    });
+
     it('GET /api/v1/categories/:id returns single category', async () => {
       const res = await request(app).get(`/api/v1/categories/${category._id}`);
       expect(res.status).toBe(200);
