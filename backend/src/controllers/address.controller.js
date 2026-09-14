@@ -15,8 +15,13 @@ const createAddress = async (req, res, next) => {
     name = name || req.user?.name || 'Customer';
     phone = phone || req.user?.phone || '9999999999';
 
-    if (!line1 || !city || !state || !pincode) {
-      throw new AppError('Address line 1, city, state, and pincode are required', 400, 'MISSING_FIELDS');
+    const details = {};
+    if (!line1 || !String(line1).trim()) details.line1 = 'Address line 1 is required';
+    if (!city || !String(city).trim()) details.city = 'City is required';
+    if (!state || !String(state).trim()) details.state = 'State is required';
+    if (!pincode || !String(pincode).trim()) details.pincode = 'Pincode is required';
+    if (Object.keys(details).length > 0) {
+      throw new AppError('Validation failed', 422, 'VALIDATION_ERROR', details);
     }
 
     if (isDefault) {
@@ -24,7 +29,7 @@ const createAddress = async (req, res, next) => {
     }
 
     const address = await Address.create({ userId: req.userId, name, phone, line1, line2, city, state, pincode, label, isDefault });
-    return created(res, { address });
+    return created(res, { address, ...address.toJSON() });
   } catch (err) { next(err); }
 };
 

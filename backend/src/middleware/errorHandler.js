@@ -34,6 +34,13 @@ const errorHandler = (err, req, res, next) => {
     statusCode = 422;
     code = 'VALIDATION_ERROR';
     message = 'Validation failed';
+    const details = {};
+    if (err.errors) {
+      Object.keys(err.errors).forEach((key) => {
+        details[key] = err.errors[key].message;
+      });
+    }
+    err.details = { ...(err.details || {}), ...details };
   }
 
   // Mongoose cast error (bad ObjectId)
