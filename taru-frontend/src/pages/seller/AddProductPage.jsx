@@ -29,13 +29,15 @@ export default function AddProductPage() {
           : Array.isArray(raw?.items)
           ? raw.items
           : []
+        const safeCats = Array.isArray(cats) ? cats : []
         if (isMounted) {
-          setCategories(cats)
+          setCategories(safeCats)
         }
       } catch (err) {
         console.error('Failed to load categories:', err)
         if (isMounted) {
           setCategories([])
+          toast.error('Unable to load categories. Please check your connection.')
         }
       } finally {
         if (isMounted) {

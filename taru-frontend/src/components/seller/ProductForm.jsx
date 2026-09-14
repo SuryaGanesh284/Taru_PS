@@ -102,7 +102,8 @@ export default function ProductForm({
     if (!form.title.trim()) newErrors.title = 'Title is required.'
     if (!form.price || isNaN(form.price) || Number(form.price) <= 0)
       newErrors.price = 'Enter a valid price.'
-    if (!form.categoryId) newErrors.categoryId = 'Please select a category.'
+    if (!form.categoryId || !String(form.categoryId).trim())
+      newErrors.categoryId = 'Please select a category.'
     if (form.type === PRODUCT_TYPES.STANDARD && (!form.quantity || form.quantity < 0))
       newErrors.quantity = 'Enter a valid quantity.'
     return newErrors
@@ -117,6 +118,8 @@ export default function ProductForm({
     }
     onSubmit({ ...form, mediaFiles })
   }
+
+  const categoryList = Array.isArray(categories) ? categories : []
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
@@ -169,25 +172,47 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="product-category" className="block text-sm font-medium text-gray-700 mb-1">
             Category <span className="text-red-500">*</span>
           </label>
           <select
+            id="product-category"
             name="categoryId"
             value={form.categoryId}
             onChange={handleChange}
-            className="input-field"
+            className={`input-field ${errors.categoryId ? 'border-red-500 focus:border-red-500 focus:ring-red-200' : ''}`}
+            aria-invalid={Boolean(errors.categoryId)}
+            aria-describedby={errors.categoryId ? 'category-error' : undefined}
           >
-            <option value="">Select category</option>
-            {Array.isArray(categories) &&
-              categories.map((cat) => (
-                <option key={cat._id} value={cat._id}>
-                  {cat.name}
+            <option value="">
+              {isCategoriesLoading ? 'Loading categories...' : 'Select category'}
+            </option>
+            {categoryList.length > 0 ? (
+              categoryList.map((cat) => {
+                const id =
+                  typeof cat === 'object' && cat !== null
+                    ? cat._id || cat.id || cat.slug || ''
+                    : String(cat)
+                const name =
+                  typeof cat === 'object' && cat !== null
+                    ? cat.name || cat.title || cat.label || cat.slug || ''
+                    : String(cat)
+                return (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                )
+              })
+            ) : (
+              !isCategoriesLoading && (
+                <option value="" disabled>
+                  No categories available
                 </option>
-              ))}
+              )
+            )}
           </select>
           {errors.categoryId && (
-            <p className="text-xs text-red-500 mt-1">{errors.categoryId}</p>
+            <p id="category-error" className="text-xs text-red-500 mt-1">{errors.categoryId}</p>
           )}
         </div>
       </div>

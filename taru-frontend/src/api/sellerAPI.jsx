@@ -18,7 +18,29 @@ export const sellerAPI = {
   getAnalytics: () => axiosInstance.get('/sellers/me/analytics'),
 
   // Seller products
-  getCategories: () => axiosInstance.get('/categories'),
+  getCategories: () =>
+    axiosInstance
+      .get('/categories')
+      .then((res) => {
+        const raw = res?.data
+        let items = []
+        if (Array.isArray(raw)) {
+          items = raw
+        } else if (Array.isArray(raw?.data)) {
+          items = raw.data
+        } else if (Array.isArray(raw?.categories)) {
+          items = raw.categories
+        } else if (Array.isArray(raw?.items)) {
+          items = raw.items
+        } else if (Array.isArray(res)) {
+          items = res
+        }
+        return { ...res, data: items, categories: items, items }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch categories in sellerAPI:', err)
+        return { data: [], categories: [], items: [] }
+      }),
 
   getMyProducts: (params) =>
     axiosInstance.get('/sellers/me/products', { params }),

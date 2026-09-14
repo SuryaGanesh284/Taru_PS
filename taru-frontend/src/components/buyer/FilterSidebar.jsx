@@ -87,7 +87,7 @@ export default function FilterSidebar({ filters, onChange, categories = [] }) {
                 />
                 <span className="text-sm text-gray-600">All Categories</span>
               </label>
-              {categories.map((cat) => (
+              {(Array.isArray(categories) ? categories : []).map((cat) => (
                 <label key={cat._id} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
