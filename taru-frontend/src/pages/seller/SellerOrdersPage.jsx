@@ -89,7 +89,7 @@ export default function SellerOrdersPage() {
                         #{order._id.slice(-6).toUpperCase()}
                       </td>
                       <td className="py-3 px-3 text-gray-600">
-                        {order.buyer?.name || '—'}
+                        {order.buyer?.name || order.buyerId?.name || order.shippingAddress?.name || '—'}
                       </td>
                       <td className="py-3 px-3 text-gray-600">
                         {order.items?.length || 0}
@@ -98,7 +98,7 @@ export default function SellerOrdersPage() {
                         {formatDate(order.createdAt)}
                       </td>
                       <td className="py-3 px-3 font-semibold">
-                        {formatCurrency(order.totals?.total || 0)}
+                        {formatCurrency(order.totals?.total ?? order.pricing?.total ?? 0)}
                       </td>
                       <td className="py-3 px-3">
                         <OrderStatusBadge status={order.status} />

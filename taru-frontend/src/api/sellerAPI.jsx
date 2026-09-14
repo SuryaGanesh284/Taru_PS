@@ -43,7 +43,7 @@ export const sellerAPI = {
     axiosInstance.delete(`/products/${productId}/media/${mediaId}`),
 
   updateInventory: (productId, data) =>
-    axiosInstance.patch(`/products/${productId}/inventory`),
+    axiosInstance.patch(`/products/${productId}/inventory`, data),
 
   registerUniqueItem: (productId, data) =>
     axiosInstance.post(`/products/${productId}/unique-item`, data),
